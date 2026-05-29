@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>미친 난이도 오목 AI</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero" aria-labelledby="title">
+        <div>
+          <p class="eyebrow">Gomoku vs Computer</p>
+          <h1 id="title">개미친 어려움 오목</h1>
+          <p class="subtitle">
+            AI가 내 다음 수뿐 아니라 플레이어의 반격까지 여러 수 앞서 예측하고, 모든 판단 과정을 로그로 남깁니다.
+          </p>
+        </div>
+        <div class="status-card" aria-live="polite">
+          <span class="status-label">현재 상태</span>
+          <strong id="statusText">돌 색을 선택하고 시작하세요.</strong>
+        </div>
+      </section>
+
+      <section class="controls" aria-label="게임 설정">
+        <fieldset class="stone-picker">
+          <legend>플레이어 돌 선택</legend>
+          <label>
+            <input type="radio" name="playerStone" value="black" checked />
+            <span class="stone black" aria-hidden="true"></span>
+            흑돌 · 선공
+          </label>
+          <label>
+            <input type="radio" name="playerStone" value="white" />
+            <span class="stone white" aria-hidden="true"></span>
+            백돌 · 후공
+          </label>
+        </fieldset>
+        <button id="newGameButton" type="button">새 게임 시작</button>
+      </section>
+
+      <section class="game-layout">
+        <div class="board-wrap">
+          <div id="board" class="board" role="grid" aria-label="15 곱하기 15 오목판"></div>
+        </div>
+        <aside class="panel" aria-label="게임 정보">
+          <h2>AI 난이도: 개미친 어려움</h2>
+          <ul>
+            <li>즉시 승리·방어·양방향 위협을 먼저 확인합니다.</li>
+            <li>반복 심화 탐색으로 1수부터 최대 4수 앞까지 단계적으로 검증합니다.</li>
+            <li>알파-베타 미니맥스가 AI와 플레이어의 최선 응수를 함께 예측합니다.</li>
+            <li>후보 생성, 가지치기, 평가 점수, 예상 라인을 모두 로그에 출력합니다.</li>
+          </ul>
+          <div class="legend">
+            <div><span class="stone black"></span> 흑돌</div>
+            <div><span class="stone white"></span> 백돌</div>
+          </div>
+          <p id="thinkingText" class="thinking" hidden>컴퓨터가 다음 수를 계산 중입니다…</p>
+        </aside>
+      </section>
+
+      <section class="log-panel" aria-labelledby="logTitle">
+        <div class="log-header">
+          <div>
+            <p class="eyebrow">AI Trace</p>
+            <h2 id="logTitle">사고 과정 로그</h2>
+          </div>
+          <button id="clearLogButton" type="button">로그 지우기</button>
+        </div>
+        <ol id="logList" class="log-list" aria-live="polite"></ol>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
