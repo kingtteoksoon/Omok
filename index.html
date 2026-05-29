@@ -24,7 +24,12 @@
       <button id="newGameBtn" class="btn-primary">새 게임</button>
     </section>
 
-    <section class="status" id="status">흑돌을 선택했습니다. 새 게임을 눌러 시작하세요.</section>
+    <section class="status" id="status">흑돌을 선택했습니다. 새 게임을 눌러 시작하세요. (3-3 금지 규칙 적용)</section>
+
+    <section class="winrate-wrap">
+      <div class="winrate-label">💻 AI 예상 승률 <span id="winRateVal">—</span></div>
+      <div class="winrate-bar"><div class="winrate-fill" id="winRateFill"></div></div>
+    </section>
 
     <div class="board-wrap">
       <canvas id="board" width="600" height="600"></canvas>

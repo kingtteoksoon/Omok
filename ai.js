@@ -166,6 +166,67 @@
     return false;
   }
 
+  /* --------------------------------------------------------------------------
+   *  금지수(3-3, 쌍삼) 판정
+   * --------------------------------------------------------------------------
+   *  3-3(쌍삼): 한 수로 '열린 3(활삼)'을 동시에 둘 개 이상 만드는 수.
+   *  본 게임에서는 흑·백 모두에게 금지한다. (단, 그 수로 5목이 완성되면
+   *  승리가 우선이므로 금지가 아니다.)
+   *
+   *  '열린 3(활삼)' 판정: 한 축의 라인을 문자열로 만들어(나=1, 빈칸=0, 벽/상대=2)
+   *  아래 패턴이 들어 있으면 활삼으로 본다. 패턴은 모두 양옆이 비어 있어
+   *  '열린 4'로 발전 가능한 모양만 골랐다.
+   *    001110 / 011100 : 한쪽에 두 칸 여유가 있는 연속 3   (.XXX. 류)
+   *    010110 / 011010 : 한 칸 띈 3(뚫린 삼)               (.X.XX. / .XX.X.)
+   * ------------------------------------------------------------------------ */
+  const OPEN_THREE_PATTERNS = ['001110', '011100', '010110', '011010'];
+
+  // (x,y)에 player 돌이 이미 있다고 보고, (dx,dy) 축에 활삼이 있는지 검사.
+  // 착수점을 중심(-5..+5)으로 한 길이 11 문자열을 만들어 패턴을 찾는다.
+  // (길이 6 패턴은 이 윈도우에서 반드시 중심(착수점)을 포함하므로,
+  //  '이 수로 새로 생긴 3'만 잡힌다.)
+  function hasOpenThreeOnAxis(board, x, y, dx, dy, player) {
+    let s = '';
+    for (let k = -5; k <= 5; k++) {
+      const nx = x + dx * k, ny = y + dy * k;
+      if (!inBounds(nx, ny)) { s += '2'; continue; } // 판 밖 = 벽
+      const v = board[ny][nx];
+      s += v === player ? '1' : v === EMPTY ? '0' : '2';
+    }
+    for (const p of OPEN_THREE_PATTERNS) if (s.indexOf(p) !== -1) return true;
+    return false;
+  }
+
+  // (x,y)가 빈칸일 때 player가 두면 활삼이 몇 개 생기는지(축 단위로 count).
+  function countOpenThrees(board, x, y, player) {
+    board[y][x] = player; // 가상 착수
+    let cnt = 0;
+    for (const [dx, dy] of LINES) {
+      if (hasOpenThreeOnAxis(board, x, y, dx, dy, player)) cnt++;
+    }
+    board[y][x] = EMPTY; // 원복
+    return cnt;
+  }
+
+  // (x,y)가 player에게 3-3 금지수인지. 5목 완성 수는 예외(승리 우선).
+  function isForbidden(board, x, y, player) {
+    if (!inBounds(x, y) || board[y][x] !== EMPTY) return false;
+    board[y][x] = player;
+    const win = isWinningMove(board, x, y, player);
+    board[y][x] = EMPTY;
+    if (win) return false; // 5목이면 금지 아님
+    return countOpenThrees(board, x, y, player) >= 2;
+  }
+
+  // 평가 점수(AI 관점, 클수록 유리)를 AI 승률(%)로 변환한다.
+  // 로지스틱 함수로 0~100% 사이에 매끄럽게 매핑한다.
+  //  점수 0 → 50%, 활삼(5만) → 약 62%, 4(10만) → 약 73%,
+  //  열린4(100만)·5목(1천만) → 거의 100%.
+  function scoreToWinRate(score) {
+    const p = 1 / (1 + Math.exp(-score / 100000));
+    return Math.round(p * 100);
+  }
+
   // 탐색 후보(둘 만한 빈칸)를 생성한다.
   // 15x15 = 225칸을 모두 탐색하면 너무 느리므로, '이미 놓인 돌의 주변
   // radius칸 이내'의 빈칸만 후보로 삼는다(오목은 기존 돌 근처에서 수가 난다).
@@ -203,14 +264,28 @@
   //  - 좋은 수를 먼저 탐색할수록 알파-베타 가지치기가 잘 일어나 탐색이 빨라진다.
   //  - 방어 가치(상대가 그 자리에 뒀을 때의 가치)에 0.9를 곱해, 동등하면
   //    공격을 약간 우선한다.
+  //  - 3-3 금지수는 후보에서 제외한다(흑·백 모두). 단, 모든 후보가 금지수인
+  //    드문 경우에는 금지를 무시하고 전체를 후보로 돌려준다.
   function orderedMoves(board, player, limit) {
     const opp = opponent(player);
-    const moves = generateMoves(board, 2);
-    const scored = moves.map(([x, y]) => {
+    const raw = generateMoves(board, 2);
+
+    const scored = [];
+    for (const [x, y] of raw) {
+      if (isForbidden(board, x, y, player)) continue; // 금지수 제외
       const atk = pointScore(board, x, y, player); // 내가 두면 얼마나 좋은가
       const def = pointScore(board, x, y, opp); // 상대가 두면 얼마나 위험한가
-      return { x, y, score: atk + def * 0.9 };
-    });
+      scored.push({ x, y, score: atk + def * 0.9 });
+    }
+    // 둘 곳이 전부 금지수면 어쩔 수 없이 금지 무시
+    if (scored.length === 0) {
+      for (const [x, y] of raw) {
+        const atk = pointScore(board, x, y, player);
+        const def = pointScore(board, x, y, opp);
+        scored.push({ x, y, score: atk + def * 0.9 });
+      }
+    }
+
     scored.sort((a, b) => b.score - a.score);
     const top = limit ? scored.slice(0, limit) : scored;
     return top.map((m) => [m.x, m.y]);
@@ -382,6 +457,7 @@
       analysis.reason = 'opening';
       analysis.timeMs = Date.now() - t0;
       analysis.pv = lineToPV([candidates[0]], aiPlayer);
+      analysis.winRate = scoreToWinRate(analysis.score);
       return { x: candidates[0][0], y: candidates[0][1], analysis };
     }
 
@@ -395,6 +471,7 @@
         analysis.score = SCORE.FIVE;
         analysis.timeMs = Date.now() - t0;
         analysis.pv = lineToPV([[x, y]], aiPlayer);
+        analysis.winRate = 100;
         return { x, y, analysis };
       }
     }
@@ -413,6 +490,7 @@
         board[y][x] = aiPlayer;
         analysis.score = evaluateBoard(board, aiPlayer);
         board[y][x] = EMPTY;
+        analysis.winRate = scoreToWinRate(analysis.score);
         return { x, y, analysis };
       }
     }
@@ -460,6 +538,7 @@
       const ordered = orderedMoves(board, aiPlayer, 1);
       analysis.timeMs = Date.now() - t0;
       analysis.pv = lineToPV([ordered[0]], aiPlayer);
+      analysis.winRate = scoreToWinRate(analysis.score);
       return { x: ordered[0][0], y: ordered[0][1], analysis };
     }
 
@@ -467,6 +546,7 @@
     analysis.score = bestResult.score;
     analysis.timeMs = Date.now() - t0;
     analysis.pv = lineToPV(bestResult.line, aiPlayer); // 예측 수순
+    analysis.winRate = scoreToWinRate(bestResult.score); // AI 승률(%)
     analysis.topMoves = bestResult.scored.slice(0, 6).map((m) => ({
       x: m.x, y: m.y, score: m.score, // 상위 6개 후보와 점수
     }));
@@ -476,6 +556,8 @@
 
   // 외부(game.js)로 공개하는 API
   // - bestMove: 다음 수 + 분석 반환 (탐색은 복사본에서, 원본 보드 불변)
+  // - isForbidden: 3-3 금지수 여부 (사람 착수 제한에 사용)
+  // - scoreToWinRate: 평가 점수 → 승률(%) 변환
   // - isWinningMove / evaluateBoard / opponent: 보조 유틸
 
   global.OmokAI = {
@@ -483,6 +565,8 @@
     EMPTY,
     SCORE,
     bestMove,
+    isForbidden,
+    scoreToWinRate,
     isWinningMove,
     evaluateBoard,
     opponent,

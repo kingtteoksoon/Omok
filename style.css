@@ -126,6 +126,39 @@ body {
   font-size: 0.95rem;
 }
 
+/* AI 예상 승률 바 */
+.winrate-wrap {
+  margin-bottom: 16px;
+}
+
+.winrate-label {
+  font-size: 0.85rem;
+  color: #cbd2d9;
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+.winrate-label #winRateVal {
+  font-weight: 700;
+  color: #f0744f;
+}
+
+.winrate-bar {
+  height: 14px;
+  background: #1f2933;
+  border: 1px solid #3e4c59;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.winrate-fill {
+  height: 100%;
+  width: 50%;
+  /* 낮으면 초록(사람 유리) → 높으면 빨강(AI 유리) */
+  background: linear-gradient(90deg, #3ebd93 0%, #f0b429 55%, #f0744f 100%);
+  transition: width 0.4s ease;
+}
+
 .board-wrap {
   position: relative;
   width: 100%;

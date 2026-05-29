@@ -27,9 +27,10 @@
 
   // "개미친 어려움" 난이도 설정:
   //  - maxDepth: 미니맥스 최대 탐색 깊이(수읽기 깊이)
-  //  - timeLimit: 한 수당 사고 시간 예산(ms). 이 시간 안에서 반복 심화로
-  //    가능한 깊이까지 탐색한다. (ai.js의 bestMove가 사용)
-  const AI_OPTIONS = { maxDepth: 10, timeLimit: 1500 };
+  //  - timeLimit: 한 수당 사고 시간 예산(ms). 반복 심화로 이 시간 안에서
+  //    최대한 많은 수를 미리 계산하며, 강제 승리/패배가 확정되면 시간이
+  //    남아도 즉시 둔다. (ai.js의 bestMove가 사용)
+  const AI_OPTIONS = { maxDepth: 14, timeLimit: 3000 };
 
   // ----- DOM 요소 캐싱 -----
   const canvas = document.getElementById('board');
@@ -41,6 +42,8 @@
   const stoneSelect = document.getElementById('stoneSelect'); // 흑/백 선택 버튼 묶음
   const logEl = document.getElementById('log'); // AI 사고 로그 패널
   const clearLogBtn = document.getElementById('clearLogBtn');
+  const winRateVal = document.getElementById('winRateVal'); // 승률 숫자
+  const winRateFill = document.getElementById('winRateFill'); // 승률 바
 
   // ----- 보드 화면 좌표 계산 -----
   // 캔버스 가장자리 여백(px). 격자선이 잘리지 않도록 안쪽으로 들여 그린다.
@@ -78,6 +81,7 @@
     started = true;
     lastMove = null;
     clearLog();
+    setWinRate(null); // 승률 초기화
     updateMoveCount();
     draw();
 
@@ -103,6 +107,17 @@
   // 플레이어 번호(1/2)를 사람이 읽는 색 이름으로 변환한다.
   function colorName(p) {
     return p === BLACK ? '흑' : '백';
+  }
+
+  // AI 예상 승률(%) 표시를 갱신한다. rate가 null이면 미정('—')으로 둔다.
+  function setWinRate(rate) {
+    if (rate === null || rate === undefined) {
+      winRateVal.textContent = '—';
+      winRateFill.style.width = '50%';
+      return;
+    }
+    winRateVal.textContent = rate + '%';
+    winRateFill.style.width = rate + '%';
   }
 
   /* ==========================================================================
@@ -164,6 +179,7 @@
       '<div class="turn">▶ ' + turnNo + '수 — 컴퓨터(' + colorName(aiColor) + ') 착수: <span class="pick">' + picked + '</span></div>' +
       '<div class="meta">판단: ' + reasonText(a.reason) +
         ' · 탐색깊이 ' + a.depth + '수 · 평가 ' + a.score.toLocaleString() +
+        ' · AI승률 ' + (a.winRate != null ? a.winRate + '%' : '—') +
         ' · 노드 ' + (a.nodes || 0).toLocaleString() + ' · ' + a.timeMs + 'ms</div>' +
       '<div class="pv">예측 수순(PV): ' + pvToText(a.pv) + '</div>' +
       '<div class="meta">후보 평가: ' + topText + '</div>' +
@@ -175,7 +191,7 @@
     // ----- 2) 콘솔: 표 형태의 상세 출력 (F12 개발자 도구) -----
     console.group('%c[오목 AI] ' + turnNo + '수 — 착수 ' + picked, 'color:#3ebd93;font-weight:bold;');
     console.log('판단 근거:', reasonText(a.reason));
-    console.log('탐색 깊이:', a.depth + '수', '| 평가 점수:', a.score, '| 탐색 노드:', a.nodes, '| 소요:', a.timeMs + 'ms');
+    console.log('탐색 깊이:', a.depth + '수', '| 평가 점수:', a.score, '| AI 승률:', a.winRate + '%', '| 탐색 노드:', a.nodes, '| 소요:', a.timeMs + 'ms');
     console.log('예측 수순(PV):', pvToText(a.pv));
     if (a.topMoves && a.topMoves.length) {
       console.table(a.topMoves.map((m) => ({ 위치: coord(m.x, m.y), 점수: m.score })));
@@ -317,11 +333,18 @@
     // 이미 돌이 있는 자리면 무시
     if (board[y][x] !== EMPTY) return;
 
+    // 3-3 금지수면 둘 수 없다(차례 유지). 단, 그 수로 5목이면 승리이므로 허용.
+    if (OmokAI.isForbidden(board, x, y, humanColor)) {
+      setStatus('🚫 ' + coord(x, y) + '은(는) 3-3 금지수입니다. 다른 곳에 두세요.');
+      return;
+    }
+
     placeStone(x, y, humanColor);
 
     // 사람의 이번 수로 승리?
     if (checkWinAt(x, y, humanColor)) {
       gameOver = true;
+      setWinRate(0); // 사람 승리 → AI 승률 0%
       setStatus('🎉 당신(' + colorName(humanColor) + ')이 이겼습니다! 새 게임을 눌러 다시 도전하세요.');
       return;
     }
@@ -364,12 +387,14 @@
 
     // 먼저 사고 과정을 로그로 남기고, 그 다음 실제로 한 수만 둔다.
     logAIMove(history.length + 1, move, move.analysis);
+    setWinRate(move.analysis.winRate); // AI 예상 승률 갱신
     placeStone(move.x, move.y, aiColor);
 
     // AI의 이번 수로 승리?
     if (checkWinAt(move.x, move.y, aiColor)) {
       gameOver = true;
       busy = false;
+      setWinRate(100);
       setStatus('💻 컴퓨터(' + colorName(aiColor) + ')가 이겼습니다. 다시 도전해 보세요!');
       return;
     }
