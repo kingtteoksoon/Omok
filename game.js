@@ -79,6 +79,7 @@
     gameOver = false;
     busy = false;
     started = true;
+    recorded = false; // 학습 기록 플래그 초기화
     lastMove = null;
     clearLog();
     setWinRate(null); // 승률 초기화
@@ -324,10 +325,25 @@
     return history.length >= SIZE * SIZE;
   }
 
+  // 한 판이 끝나면 학습 모듈에 결과를 기록한다(경험 메모리·통계·로그 저장).
+  //  winner: 1(흑) | 2(백) | 0(무승부)
+  let recorded = false; // 한 판당 한 번만 기록
+  function recordEnd(winner) {
+    if (recorded || !started) return;
+    recorded = true;
+    OmokLearn.recordGame({
+      humanColor,
+      aiColor,
+      winner,
+      moves: history.map((m) => ({ x: m.x, y: m.y, player: m.player })),
+    });
+    renderLearn();
+  }
+
   // 사람이 (x, y)를 클릭했을 때의 처리.
   function handleHumanMove(x, y) {
-    // 시작 전, 게임 종료, AI 사고 중에는 무시
-    if (!started || gameOver || busy) return;
+    // 시작 전, 게임 종료, AI 사고 중, 학습 중에는 무시
+    if (!started || gameOver || busy || OmokLearn.isTraining()) return;
     // 지금이 사람 차례가 아니면 무시
     if (currentPlayer !== humanColor) return;
     // 이미 돌이 있는 자리면 무시
@@ -346,12 +362,14 @@
       gameOver = true;
       setWinRate(0); // 사람 승리 → AI 승률 0%
       setStatus('🎉 당신(' + colorName(humanColor) + ')이 이겼습니다! 새 게임을 눌러 다시 도전하세요.');
+      recordEnd(humanColor);
       return;
     }
     // 판이 다 찼으면 무승부
     if (isBoardFull()) {
       gameOver = true;
       setStatus('무승부입니다.');
+      recordEnd(0);
       return;
     }
 
@@ -372,9 +390,14 @@
 
   // AI에게 다음 수를 계산시키고 그 결과를 실제로 둔다.
   function runAI() {
+    // 경험 메모리(학습된 오프닝 북) 가산점 함수를 만들어 탐색에 전달한다.
+    // → 과거에 이겼던 수는 선호하고 졌던 수는 회피한다.
+    const bookBonus = OmokLearn.makeBookBonus(board, aiColor);
+    const opts = bookBonus ? Object.assign({}, AI_OPTIONS, { bookBonus }) : AI_OPTIONS;
+
     // 주의: bestMove는 보드 "복사본"에서만 수읽기를 한다.
     // 따라서 예측 수순(PV)은 실제 board에 반영되지 않고, AI는 단 한 수만 둔다.
-    const move = OmokAI.bestMove(board, aiColor, AI_OPTIONS);
+    const move = OmokAI.bestMove(board, aiColor, opts);
     thinkingEl.hidden = true;
 
     // 둘 곳이 없으면(이론상 가득 참) 무승부 처리
@@ -382,6 +405,7 @@
       gameOver = true;
       busy = false;
       setStatus('무승부입니다.');
+      recordEnd(0);
       return;
     }
 
@@ -396,6 +420,7 @@
       busy = false;
       setWinRate(100);
       setStatus('💻 컴퓨터(' + colorName(aiColor) + ')가 이겼습니다. 다시 도전해 보세요!');
+      recordEnd(aiColor);
       return;
     }
     // 판이 다 찼으면 무승부
@@ -403,6 +428,7 @@
       gameOver = true;
       busy = false;
       setStatus('무승부입니다.');
+      recordEnd(0);
       return;
     }
 
@@ -428,8 +454,120 @@
     if (cell) handleHumanMove(cell.x, cell.y);
   });
 
-  newGameBtn.addEventListener('click', resetGame);
+  newGameBtn.addEventListener('click', () => {
+    if (OmokLearn.isTraining()) return; // 학습 중에는 새 게임 금지
+    resetGame();
+  });
   clearLogBtn.addEventListener('click', clearLog);
+
+  /* ==========================================================================
+   *  강화학습 패널
+   * ======================================================================== */
+  const learnStats = document.getElementById('learnStats');
+  const learnWeights = document.getElementById('learnWeights');
+  const trainBtn = document.getElementById('trainBtn');
+  const cancelTrainBtn = document.getElementById('cancelTrainBtn');
+  const trainItersInput = document.getElementById('trainIters');
+  const trainProgress = document.getElementById('trainProgress');
+  const trainProgressFill = document.getElementById('trainProgressFill');
+  const trainProgressText = document.getElementById('trainProgressText');
+  const exportBtn = document.getElementById('exportBtn');
+  const importBtn = document.getElementById('importBtn');
+  const importFile = document.getElementById('importFile');
+  const resetLearnBtn = document.getElementById('resetLearnBtn');
+
+  // 가중치를 보기 좋은 문자열로 (소수 2자리)
+  function fmtWeights(w) {
+    return Object.keys(w).map((k) => k + '=' + w[k].toFixed(2)).join('  ');
+  }
+
+  // 학습 통계/가중치를 패널에 그린다.
+  function renderLearn() {
+    const s = OmokLearn.getStats();
+    const winPct = s.games ? Math.round((s.aiWins / s.games) * 100) : 0;
+    learnStats.innerHTML =
+      '총 ' + s.games + '판 · AI ' + s.aiWins + '승 / 사람 ' + s.humanWins + '승 / 무 ' + s.draws +
+      ' (AI 승률 ' + winPct + '%)<br>' +
+      '학습 반복 ' + s.trainIters + '회 · 경험 국면 ' + s.bookSize + '개 · 저장 로그 ' + s.logs + '판';
+    learnWeights.textContent = '평가 가중치 ▸ ' + fmtWeights(s.weights);
+  }
+
+  // 자가학습 실행
+  trainBtn.addEventListener('click', () => {
+    if (OmokLearn.isTraining()) return;
+    const iters = Math.max(1, Math.min(200, parseInt(trainItersInput.value, 10) || 15));
+
+    trainBtn.hidden = true;
+    cancelTrainBtn.hidden = false;
+    trainProgress.hidden = false;
+    trainProgressFill.style.width = '0%';
+    trainProgressText.textContent = '학습 준비 중…';
+    setStatus('🧠 자가대국 학습 중… (완료까지 보드 입력이 잠시 잠깁니다)');
+
+    OmokLearn.train(
+      { iterations: iters },
+      {
+        onProgress(done, total, info) {
+          const pct = Math.round((done / total) * 100);
+          trainProgressFill.style.width = pct + '%';
+          trainProgressText.textContent =
+            done + '/' + total + ' 세대 · 교체 ' + info.accepted + '회' +
+            (info.lastMatch ? ' (직전 매치 ' + info.lastMatch.challengerWins + ':' + info.lastMatch.championWins + ')' : '');
+          learnWeights.textContent = '평가 가중치 ▸ ' + fmtWeights(info.weights);
+        },
+        onDone(result) {
+          trainBtn.hidden = false;
+          cancelTrainBtn.hidden = true;
+          trainProgress.hidden = true;
+          renderLearn();
+          setStatus('✅ 학습 완료: ' + result.iterations + '세대 중 ' + result.accepted + '회 강화. 새 게임으로 대결해 보세요!');
+          console.log('[학습] 완료', result);
+        },
+      }
+    );
+  });
+
+  cancelTrainBtn.addEventListener('click', () => {
+    OmokLearn.cancelTraining();
+    setStatus('학습을 중지했습니다.');
+  });
+
+  // 로그/학습데이터 JSON 내보내기 (파일 다운로드)
+  exportBtn.addEventListener('click', () => {
+    const blob = new Blob([OmokLearn.exportJSON()], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'omok-learning-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  // JSON 불러오기
+  importBtn.addEventListener('click', () => importFile.click());
+  importFile.addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const ok = OmokLearn.importJSON(reader.result);
+      renderLearn();
+      setStatus(ok ? '✅ 학습 데이터를 불러왔습니다.' : '⚠️ 불러오기에 실패했습니다(형식 확인).');
+    };
+    reader.readAsText(file);
+    importFile.value = ''; // 같은 파일 재선택 허용
+  });
+
+  // 학습 초기화
+  resetLearnBtn.addEventListener('click', () => {
+    if (OmokLearn.isTraining()) return;
+    if (!confirm('학습 데이터(가중치·경험·통계·로그)를 모두 초기화할까요?')) return;
+    OmokLearn.reset();
+    renderLearn();
+    setStatus('학습 데이터를 초기화했습니다.');
+  });
 
   // 흑/백 선택 토글. 선택만 해두고 실제 적용은 "새 게임"을 눌렀을 때.
   stoneSelect.addEventListener('click', (e) => {
@@ -453,6 +591,10 @@
       setStatus('백돌을 선택했습니다(후공). 새 게임을 눌러 시작하세요.');
     }
   });
+
+  // 저장된 학습 데이터를 불러와 AI에 적용하고 패널을 그린다.
+  OmokLearn.init();
+  renderLearn();
 
   // 페이지 로드 직후 빈 판을 한 번 그려둔다. (대국은 "새 게임"부터)
   draw();

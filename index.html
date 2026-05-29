@@ -44,13 +44,39 @@
       <div class="log" id="log"></div>
     </section>
 
+    <section class="learn-panel">
+      <div class="learn-head">📈 강화학습</div>
+      <div class="learn-stats" id="learnStats">통계 로딩 중…</div>
+      <div class="learn-weights" id="learnWeights"></div>
+
+      <div class="learn-train">
+        <label class="learn-label">자가학습 반복
+          <input type="number" id="trainIters" value="15" min="1" max="200" />회
+        </label>
+        <button id="trainBtn" class="btn-primary">자가학습 실행</button>
+        <button id="cancelTrainBtn" class="btn-secondary" hidden>중지</button>
+      </div>
+      <div class="learn-progress" id="trainProgress" hidden>
+        <div class="learn-progress-bar"><div class="learn-progress-fill" id="trainProgressFill"></div></div>
+        <span id="trainProgressText"></span>
+      </div>
+
+      <div class="learn-actions">
+        <button id="exportBtn" class="learn-btn">로그 내보내기(JSON)</button>
+        <button id="importBtn" class="learn-btn">불러오기</button>
+        <input type="file" id="importFile" accept="application/json" hidden />
+        <button id="resetLearnBtn" class="learn-btn danger">학습 초기화</button>
+      </div>
+    </section>
+
     <footer class="footer">
       <span id="moveCount">수: 0</span>
-      <span class="hint">자세한 분석은 브라우저 콘솔(F12)에도 출력됩니다.</span>
+      <span class="hint">자세한 분석은 브라우저 콘솔(F12)에도 출력됩니다. 학습 데이터는 이 브라우저에 저장됩니다.</span>
     </footer>
   </div>
 
   <script src="ai.js"></script>
+  <script src="learning.js"></script>
   <script src="game.js"></script>
 </body>
 </html>

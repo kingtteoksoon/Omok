@@ -44,6 +44,39 @@
     ONE: 10,
   };
 
+  // 학습(강화학습)으로 조정되는 '가중치'.
+  //  - 5목/열린4/4 같은 전술적 모양은 거의 절대적이라 학습 대상에서 제외하고,
+  //    포지셔널 모양(열린3·3·열린2·2·1)과 방어 계수만 곱셈 가중치로 학습한다.
+  //  - 기본값 1.0(방어는 0.9) → 학습 전에는 기존과 동일하게 동작.
+  //  - learning.js가 setWeights()로 갱신하고 localStorage에 저장한다.
+  const W = {
+    OPEN_THREE: 1,
+    THREE: 1,
+    OPEN_TWO: 1,
+    TWO: 1,
+    ONE: 1,
+    defense: 0.9, // 후보 정렬 시 방어 가치에 곱하는 계수
+  };
+
+  // 연속 길이(count)와 열린 끝 수(openEnds)로 모양의 점수를 계산한다.
+  // evalDirection / lineScore가 공통으로 쓰는 매핑. 학습 가중치(W)를 반영한다.
+  function shapeScore(count, openEnds) {
+    if (count >= 5) return SCORE.FIVE;
+    if (count === 4) return openEnds === 2 ? SCORE.OPEN_FOUR : openEnds === 1 ? SCORE.FOUR : 0;
+    if (count === 3) return openEnds === 2 ? SCORE.OPEN_THREE * W.OPEN_THREE : openEnds === 1 ? SCORE.THREE * W.THREE : 0;
+    if (count === 2) return openEnds === 2 ? SCORE.OPEN_TWO * W.OPEN_TWO : openEnds === 1 ? SCORE.TWO * W.TWO : 0;
+    if (count === 1) return openEnds === 2 ? SCORE.ONE * W.ONE : 0;
+    return 0;
+  }
+
+  // 학습된 가중치를 적용/조회한다.
+  function setWeights(partial) {
+    if (partial) for (const k in W) if (k in partial && typeof partial[k] === 'number') W[k] = partial[k];
+  }
+  function getWeights() {
+    return Object.assign({}, W);
+  }
+
   // 탐색 도중 시간 예산을 초과했을 때, 깊은 재귀에서 한 번에 빠져나오기 위해
   // throw하는 신호 객체. (정상 반환값과 구분되도록 고유 객체를 사용)
   const ABORT = { abort: true };
@@ -91,14 +124,9 @@
       else break;
     }
 
-    // 연속 길이와 열림 정도를 점수표에 매핑.
+    // 연속 길이와 열림 정도를 (학습 가중치가 반영된) 점수로 매핑.
     // (열림이 0이면 양끝이 다 막혀 발전 불가 → 0점)
-    if (count >= 5) return SCORE.FIVE;
-    if (count === 4) return openEnds === 2 ? SCORE.OPEN_FOUR : openEnds === 1 ? SCORE.FOUR : 0;
-    if (count === 3) return openEnds === 2 ? SCORE.OPEN_THREE : openEnds === 1 ? SCORE.THREE : 0;
-    if (count === 2) return openEnds === 2 ? SCORE.OPEN_TWO : openEnds === 1 ? SCORE.TWO : 0;
-    if (count === 1) return openEnds === 2 ? SCORE.ONE : 0;
-    return 0;
+    return shapeScore(count, openEnds);
   }
 
   // (x,y)에 player가 둘 때의 한 점 가치 = 4축 평가의 합.
@@ -121,12 +149,7 @@
     const afterOpen = inBounds(cx, cy) && board[cy][cx] === EMPTY;
     const openEnds = (beforeOpen ? 1 : 0) + (afterOpen ? 1 : 0);
 
-    if (count >= 5) return SCORE.FIVE;
-    if (count === 4) return openEnds === 2 ? SCORE.OPEN_FOUR : openEnds === 1 ? SCORE.FOUR : 0;
-    if (count === 3) return openEnds === 2 ? SCORE.OPEN_THREE : openEnds === 1 ? SCORE.THREE : 0;
-    if (count === 2) return openEnds === 2 ? SCORE.OPEN_TWO : openEnds === 1 ? SCORE.TWO : 0;
-    if (count === 1) return openEnds === 2 ? SCORE.ONE : 0;
-    return 0;
+    return shapeScore(count, openEnds);
   }
 
   // 보드 전체를 aiPlayer 관점에서 정적 평가한다(미니맥스의 잎 노드 평가 함수).
@@ -275,14 +298,14 @@
       if (isForbidden(board, x, y, player)) continue; // 금지수 제외
       const atk = pointScore(board, x, y, player); // 내가 두면 얼마나 좋은가
       const def = pointScore(board, x, y, opp); // 상대가 두면 얼마나 위험한가
-      scored.push({ x, y, score: atk + def * 0.9 });
+      scored.push({ x, y, score: atk + def * W.defense });
     }
     // 둘 곳이 전부 금지수면 어쩔 수 없이 금지 무시
     if (scored.length === 0) {
       for (const [x, y] of raw) {
         const atk = pointScore(board, x, y, player);
         const def = pointScore(board, x, y, opp);
-        scored.push({ x, y, score: atk + def * 0.9 });
+        scored.push({ x, y, score: atk + def * W.defense });
       }
     }
 
@@ -542,16 +565,34 @@
       return { x: ordered[0][0], y: ordered[0][1], analysis };
     }
 
+    // 경험 메모리(학습된 오프닝 북) 반영:
+    //  options.bookBonus(x, y)가 주어지면, 후보들의 탐색 점수에 '과거 이 수가
+    //  승리로 이어진 정도'를 더해 다시 최선 수를 고른다. (이긴 수 선호/진 수 회피)
+    //  보너스 크기는 전술 점수보다 작게 설계되어, 비등한 후보들 사이의 '취향'만
+    //  바꾸고 명백한 전술적 수는 뒤집지 않는다(learning.js의 BOOK_SCALE 참고).
+    let chosen = bestResult.scored[0] || { x: bestResult.move[0], y: bestResult.move[1], score: bestResult.score, line: bestResult.line };
+    if (typeof options.bookBonus === 'function' && bestResult.scored.length) {
+      let bestVal = -Infinity;
+      for (const m of bestResult.scored) {
+        const v = m.score + (options.bookBonus(m.x, m.y) || 0);
+        m.adjScore = v;
+        if (v > bestVal) { bestVal = v; chosen = m; }
+      }
+    } else {
+      // 보너스가 없으면 탐색이 고른 최선 수를 그대로 사용
+      chosen = { x: bestResult.move[0], y: bestResult.move[1], score: bestResult.score, line: bestResult.line };
+    }
+
     // 최종 분석 정보 채우기
-    analysis.score = bestResult.score;
+    analysis.score = chosen.score;
     analysis.timeMs = Date.now() - t0;
-    analysis.pv = lineToPV(bestResult.line, aiPlayer); // 예측 수순
-    analysis.winRate = scoreToWinRate(bestResult.score); // AI 승률(%)
+    analysis.pv = lineToPV(chosen.line || [[chosen.x, chosen.y]], aiPlayer); // 예측 수순
+    analysis.winRate = scoreToWinRate(chosen.score); // AI 승률(%)
     analysis.topMoves = bestResult.scored.slice(0, 6).map((m) => ({
       x: m.x, y: m.y, score: m.score, // 상위 6개 후보와 점수
     }));
 
-    return { x: bestResult.move[0], y: bestResult.move[1], analysis };
+    return { x: chosen.x, y: chosen.y, analysis };
   }
 
   // 외부(game.js)로 공개하는 API
@@ -570,5 +611,7 @@
     isWinningMove,
     evaluateBoard,
     opponent,
+    setWeights, // 학습된 평가 가중치 적용
+    getWeights, // 현재 가중치 조회
   };
 })(typeof window !== 'undefined' ? window : globalThis);

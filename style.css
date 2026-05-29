@@ -267,6 +267,112 @@ body {
   font-size: 0.74rem;
 }
 
+/* 강화학습 패널 */
+.learn-panel {
+  margin-top: 18px;
+  background: #14191f;
+  border: 1px solid #3e4c59;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.learn-head {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.learn-stats {
+  font-size: 0.82rem;
+  color: #cbd2d9;
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+
+.learn-weights {
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.74rem;
+  color: #7b8794;
+  margin-bottom: 12px;
+  word-break: break-all;
+}
+
+.learn-train {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.learn-label {
+  font-size: 0.82rem;
+  color: #cbd2d9;
+}
+
+.learn-label input {
+  width: 56px;
+  margin: 0 4px;
+  padding: 5px 6px;
+  background: #1f2933;
+  border: 1px solid #3e4c59;
+  border-radius: 6px;
+  color: #e4e7eb;
+  font-size: 0.85rem;
+}
+
+.learn-progress {
+  margin-bottom: 12px;
+  font-size: 0.78rem;
+  color: #9aa5b1;
+}
+
+.learn-progress-bar {
+  height: 10px;
+  background: #1f2933;
+  border: 1px solid #3e4c59;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.learn-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #3ebd93, #f0b429);
+  transition: width 0.2s linear;
+}
+
+.learn-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.learn-btn {
+  border: 1px solid #3e4c59;
+  background: #1f2933;
+  color: #cbd2d9;
+  border-radius: 6px;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.learn-btn:hover {
+  border-color: #616e7c;
+  color: #e4e7eb;
+}
+
+.learn-btn.danger {
+  border-color: #7b2d2d;
+  color: #e0a3a3;
+}
+
+.learn-btn.danger:hover {
+  background: #3a1d1d;
+}
+
 .footer {
   margin-top: 14px;
   text-align: center;
