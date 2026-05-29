@@ -296,6 +296,12 @@
     const maxDepth = options.maxDepth || 10;
     const timeLimit = options.timeLimit || 1500;
 
+    // 중요: 탐색은 복사본에서만 수행한다.
+    // 미니맥스는 보드를 직접 수정하며, 시간 초과 시 예외가 복원 코드를
+    // 건너뛸 수 있다. 원본 보드를 넘기면 가상으로 둔 돌이 실제로 남아버린다.
+    // 복사본을 쓰면 원본은 절대 변경되지 않으므로 AI는 "생각만" 한다.
+    board = board.map((row) => row.slice());
+
     const human = opponent(aiPlayer);
     const t0 = Date.now();
     const analysis = {
