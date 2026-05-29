@@ -6,7 +6,8 @@
   const EMPTY = OmokAI.EMPTY; // 0
   const BLACK = 1;
   const WHITE = 2;
-  const AI_DEPTH = 4; // "개미친 어려움" 탐색 깊이
+  // "개미친 어려움": 반복 심화로 최대 깊이까지, 시간 예산 안에서 탐색
+  const AI_OPTIONS = { maxDepth: 10, timeLimit: 1500 };
 
   const canvas = document.getElementById('board');
   const ctx = canvas.getContext('2d');
@@ -16,6 +17,8 @@
   const newGameBtn = document.getElementById('newGameBtn');
   const undoBtn = document.getElementById('undoBtn');
   const stoneSelect = document.getElementById('stoneSelect');
+  const logEl = document.getElementById('log');
+  const clearLogBtn = document.getElementById('clearLogBtn');
 
   // 보드 픽셀 계산
   const PADDING = 30;
@@ -47,6 +50,7 @@
     busy = false;
     started = true;
     lastMove = null;
+    clearLog();
     updateMoveCount();
     draw();
 
@@ -69,6 +73,75 @@
 
   function colorName(p) {
     return p === BLACK ? '흑' : '백';
+  }
+
+  // ---- 로그 ----
+  // 좌표 표기: 열 A~O, 행 1~15  예) (7,7) → "H8"
+  function coord(x, y) {
+    return String.fromCharCode(65 + x) + (y + 1);
+  }
+
+  function pvToText(pv) {
+    if (!pv || pv.length === 0) return '(없음)';
+    return pv.map((p) => colorName(p.player) + coord(p.x, p.y)).join(' → ');
+  }
+
+  function reasonText(reason) {
+    switch (reason) {
+      case 'opening': return '포석(중앙 선점)';
+      case 'immediate_win': return '즉시 5목 완성 — 승리!';
+      case 'block': return '상대 5목 임박 — 방어';
+      default: return '심화 탐색';
+    }
+  }
+
+  function clearLog() {
+    logEl.innerHTML = '';
+  }
+
+  // AI 분석 결과를 화면 패널 + 콘솔에 출력
+  function logAIMove(turnNo, move, analysis) {
+    const a = analysis;
+    const picked = coord(move.x, move.y);
+
+    // ---- 화면 패널 ----
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+
+    const topText = a.topMoves && a.topMoves.length
+      ? a.topMoves.map((m) => coord(m.x, m.y) + '(' + m.score.toLocaleString() + ')').join(', ')
+      : '—';
+    const depthText = a.perDepth && a.perDepth.length
+      ? a.perDepth.map((d) => 'd' + d.depth + ':' + d.ms + 'ms/' + d.nodes.toLocaleString() + 'n').join('  ')
+      : '—';
+
+    entry.innerHTML =
+      '<div class="turn">▶ ' + turnNo + '수 — 컴퓨터(' + colorName(aiColor) + ') 착수: <span class="pick">' + picked + '</span></div>' +
+      '<div class="meta">판단: ' + reasonText(a.reason) +
+        ' · 탐색깊이 ' + a.depth + '수 · 평가 ' + a.score.toLocaleString() +
+        ' · 노드 ' + (a.nodes || 0).toLocaleString() + ' · ' + a.timeMs + 'ms</div>' +
+      '<div class="pv">예측 수순(PV): ' + pvToText(a.pv) + '</div>' +
+      '<div class="meta">후보 평가: ' + topText + '</div>' +
+      '<div class="depths">깊이별: ' + depthText + '</div>';
+
+    logEl.appendChild(entry);
+    logEl.scrollTop = logEl.scrollHeight;
+
+    // ---- 콘솔 (상세) ----
+    console.group('%c[오목 AI] ' + turnNo + '수 — 착수 ' + picked, 'color:#3ebd93;font-weight:bold;');
+    console.log('판단 근거:', reasonText(a.reason));
+    console.log('탐색 깊이:', a.depth + '수', '| 평가 점수:', a.score, '| 탐색 노드:', a.nodes, '| 소요:', a.timeMs + 'ms');
+    console.log('예측 수순(PV):', pvToText(a.pv));
+    if (a.topMoves && a.topMoves.length) {
+      console.table(a.topMoves.map((m) => ({ 위치: coord(m.x, m.y), 점수: m.score })));
+    }
+    if (a.perDepth && a.perDepth.length) {
+      console.log('깊이별 진행:');
+      console.table(a.perDepth.map((d) => ({
+        깊이: d.depth, 평가: d.score, 노드: d.nodes, 누적시간_ms: d.ms, 예측수순: pvToText(d.pv),
+      })));
+    }
+    console.groupEnd();
   }
 
   // ---- 그리기 ----
@@ -205,7 +278,7 @@
   }
 
   function runAI() {
-    const move = OmokAI.bestMove(board, aiColor, AI_DEPTH);
+    const move = OmokAI.bestMove(board, aiColor, AI_OPTIONS);
     thinkingEl.hidden = true;
 
     if (!move || board[move.y][move.x] !== EMPTY) {
@@ -216,6 +289,7 @@
       return;
     }
 
+    logAIMove(history.length + 1, move, move.analysis);
     placeStone(move.x, move.y, aiColor);
 
     if (checkWinAt(move.x, move.y, aiColor)) {
@@ -284,6 +358,7 @@
 
   newGameBtn.addEventListener('click', resetGame);
   undoBtn.addEventListener('click', undo);
+  clearLogBtn.addEventListener('click', clearLog);
 
   stoneSelect.addEventListener('click', (e) => {
     const btn = e.target.closest('.seg-btn');
