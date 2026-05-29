@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>오목 — 개미친 어려움</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>오목</h1>
+      <p class="subtitle">컴퓨터와 대결 · 난이도 <strong>개미친 어려움</strong></p>
+    </header>
+
+    <section class="controls">
+      <div class="control-group">
+        <span class="label">돌 선택</span>
+        <div class="seg" id="stoneSelect">
+          <button class="seg-btn active" data-stone="black">⚫ 흑돌 (선공)</button>
+          <button class="seg-btn" data-stone="white">⚪ 백돌 (후공)</button>
+        </div>
+      </div>
+      <button id="newGameBtn" class="btn-primary">새 게임</button>
+      <button id="undoBtn" class="btn-secondary">무르기</button>
+    </section>
+
+    <section class="status" id="status">흑돌을 선택했습니다. 새 게임을 눌러 시작하세요.</section>
+
+    <div class="board-wrap">
+      <canvas id="board" width="600" height="600"></canvas>
+      <div class="thinking" id="thinking" hidden>컴퓨터가 생각 중…</div>
+    </div>
+
+    <footer class="footer">
+      <span id="moveCount">수: 0</span>
+    </footer>
+  </div>
+
+  <script src="ai.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
