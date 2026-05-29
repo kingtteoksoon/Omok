@@ -13,17 +13,26 @@
 (function (global) {
   'use strict';
 
-  const SIZE = 15;
-  const EMPTY = 0;
+  const SIZE = 15; // 오목판 한 변 칸 수
+  const EMPTY = 0; // 빈칸 표현값 (1 = 흑, 2 = 백)
 
-  // 4축 (가로, 세로, 두 대각선)
+  // 패턴을 검사할 4개의 축 방향.
+  // 8방향이 아니라 4축만 보는 이유: (1,0)과 (-1,0)은 같은 '가로줄'이므로,
+  // 한 축에서 양쪽(정/역방향)을 함께 세면 8방향을 모두 커버한다.
   const LINES = [
-    [1, 0],
-    [0, 1],
-    [1, 1],
-    [1, -1],
+    [1, 0], // 가로 —
+    [0, 1], // 세로 |
+    [1, 1], // 대각 ＼
+    [1, -1], // 대각 ／
   ];
 
+  // 패턴별 가치 점수표. 값의 자릿수 차이가 곧 우선순위다.
+  //  - FIVE       : 5목 완성 (승리)
+  //  - OPEN_FOUR  : 열린 4 (양끝 모두 빈칸) → 막아도 다음 수에 5목, 사실상 승리
+  //  - FOUR       : 닫힌 4 (한쪽만 열림) → 반드시 막아야 하는 강한 위협
+  //  - OPEN_THREE : 열린 3 → 방치하면 열린 4가 되는 위협
+  //  - THREE      : 닫힌 3
+  //  - OPEN_TWO/TWO/ONE : 발전 가능성이 있는 약한 모양
   const SCORE = {
     FIVE: 10000000,
     OPEN_FOUR: 1000000,
@@ -35,9 +44,13 @@
     ONE: 10,
   };
 
-  // 탐색 도중 시간 초과 시 깔끔하게 빠져나오기 위한 신호
+  // 탐색 도중 시간 예산을 초과했을 때, 깊은 재귀에서 한 번에 빠져나오기 위해
+  // throw하는 신호 객체. (정상 반환값과 구분되도록 고유 객체를 사용)
   const ABORT = { abort: true };
 
+  // 모듈 전역 탐색 상태:
+  //  - nodeCount: 현재 깊이 탐색에서 방문한 노드 수 (성능 로그용)
+  //  - deadline : 탐색을 멈춰야 하는 절대 시각(ms). Date.now()와 비교한다.
   let nodeCount = 0;
   let deadline = Infinity;
 
@@ -49,11 +62,15 @@
     return player === 1 ? 2 : 1;
   }
 
-  // (x,y)에 player 돌이 있다고 보고 한 축의 패턴 가치 평가
+  // (x,y)에 player 돌을 놓는다고 가정하고, (dx,dy) 축에서 만들어지는 모양의
+  // 가치를 평가한다. 그 자리 기준으로 정방향·역방향으로 같은 색이 몇 개
+  // 연속되는지(count)와, 양 끝이 빈칸으로 열려 있는지(openEnds)를 센다.
+  // → 후보 수의 '공격/방어 가치'를 빠르게 어림하는 데 쓴다(정렬·즉시판단용).
   function evalDirection(board, x, y, dx, dy, player) {
-    let count = 1;
-    let openEnds = 0;
+    let count = 1; // 놓을 돌 자신을 포함해 시작
+    let openEnds = 0; // 열린 끝(빈칸으로 막힌) 개수
 
+    // 정방향(+)으로 같은 색 연속 세기. 빈칸을 만나면 그쪽 끝은 '열림'.
     let i = 1;
     while (true) {
       const nx = x + dx * i, ny = y + dy * i;
@@ -61,8 +78,9 @@
       const v = board[ny][nx];
       if (v === player) { count++; i++; }
       else if (v === EMPTY) { openEnds++; break; }
-      else break;
+      else break; // 상대 돌 → 그쪽 끝은 막힘
     }
+    // 역방향(-)으로도 동일하게 센다.
     i = 1;
     while (true) {
       const nx = x - dx * i, ny = y - dy * i;
@@ -73,6 +91,8 @@
       else break;
     }
 
+    // 연속 길이와 열림 정도를 점수표에 매핑.
+    // (열림이 0이면 양끝이 다 막혀 발전 불가 → 0점)
     if (count >= 5) return SCORE.FIVE;
     if (count === 4) return openEnds === 2 ? SCORE.OPEN_FOUR : openEnds === 1 ? SCORE.FOUR : 0;
     if (count === 3) return openEnds === 2 ? SCORE.OPEN_THREE : openEnds === 1 ? SCORE.THREE : 0;
@@ -81,17 +101,22 @@
     return 0;
   }
 
-  // (x,y)에 player가 둘 때의 가치 (4축 합)
+  // (x,y)에 player가 둘 때의 한 점 가치 = 4축 평가의 합.
+  // 후보 수 정렬과 즉시 위협 판단의 휴리스틱으로 사용.
   function pointScore(board, x, y, player) {
     let total = 0;
     for (const [dx, dy] of LINES) total += evalDirection(board, x, y, dx, dy, player);
     return total;
   }
 
-  // 줄 시작점에서 연속 길이/열림으로 점수 산정
+  // 이미 놓인 돌들로 이루어진 '한 줄'을 그 줄의 시작점(x,y)에서부터 평가한다.
+  // evalDirection이 '놓을 후보 한 점'을 보는 것과 달리, 이쪽은 보드 전체를
+  // 훑는 evaluateBoard에서 실제 모양의 점수를 매기는 데 쓴다.
   function lineScore(board, x, y, dx, dy, v) {
+    // 시작점에서 같은 색(v)이 이어지는 길이를 센다.
     let count = 0, cx = x, cy = y;
     while (inBounds(cx, cy) && board[cy][cx] === v) { count++; cx += dx; cy += dy; }
+    // 줄의 앞쪽(시작점 직전)과 뒤쪽(연속이 끝난 칸)이 빈칸인지로 열림 판정.
     const beforeOpen = inBounds(x - dx, y - dy) && board[y - dy][x - dx] === EMPTY;
     const afterOpen = inBounds(cx, cy) && board[cy][cx] === EMPTY;
     const openEnds = (beforeOpen ? 1 : 0) + (afterOpen ? 1 : 0);
@@ -104,7 +129,9 @@
     return 0;
   }
 
-  // 보드 전체를 aiPlayer 관점에서 평가
+  // 보드 전체를 aiPlayer 관점에서 정적 평가한다(미니맥스의 잎 노드 평가 함수).
+  // 내 돌이 만든 모양은 +, 상대 모양은 - 로 합산한다.
+  // 값이 클수록 AI에게 유리한 국면.
   function evaluateBoard(board, aiPlayer) {
     let score = 0;
     for (let y = 0; y < SIZE; y++) {
@@ -112,7 +139,9 @@
         const v = board[y][x];
         if (v === EMPTY) continue;
         for (const [dx, dy] of LINES) {
-          // 줄 시작점에서만 평가해 중복 방지
+          // 한 줄을 그 줄의 '시작점'에서 한 번만 평가한다.
+          // 바로 앞 칸이 같은 색이면 이 칸은 시작점이 아니므로 건너뛴다
+          // → 같은 줄을 여러 번 세는 중복 계산 방지.
           if (inBounds(x - dx, y - dy) && board[y - dy][x - dx] === v) continue;
           const s = lineScore(board, x, y, dx, dy, v);
           score += v === aiPlayer ? s : -s;
@@ -122,24 +151,29 @@
     return score;
   }
 
-  // (x,y)에 player가 두면 5목이 되는지
+  // (x,y)에 player가 (이미 놓았다고 가정하고) 5목 이상이 만들어지는지 검사.
+  // 4축 각각에 대해 양방향 연속 길이를 합쳐 5 이상이면 승리.
   function isWinningMove(board, x, y, player) {
     for (const [dx, dy] of LINES) {
       let count = 1, i = 1;
+      // 정방향 연속
       while (inBounds(x + dx * i, y + dy * i) && board[y + dy * i][x + dx * i] === player) { count++; i++; }
       i = 1;
+      // 역방향 연속
       while (inBounds(x - dx * i, y - dy * i) && board[y - dy * i][x - dx * i] === player) { count++; i++; }
       if (count >= 5) return true;
     }
     return false;
   }
 
-  // 기존 돌 주변 빈칸 후보 생성
+  // 탐색 후보(둘 만한 빈칸)를 생성한다.
+  // 15x15 = 225칸을 모두 탐색하면 너무 느리므로, '이미 놓인 돌의 주변
+  // radius칸 이내'의 빈칸만 후보로 삼는다(오목은 기존 돌 근처에서 수가 난다).
   function generateMoves(board, radius) {
     radius = radius || 2;
-    const seen = new Set();
+    const seen = new Set(); // 중복 후보 제거용
     const moves = [];
-    let hasStone = false;
+    let hasStone = false; // 판에 돌이 하나라도 있는지
     for (let y = 0; y < SIZE; y++) {
       for (let x = 0; x < SIZE; x++) {
         if (board[y][x] === EMPTY) continue;
@@ -156,6 +190,7 @@
         }
       }
     }
+    // 판이 비었으면 정석대로 천원(중앙)에 첫 수를 둔다.
     if (!hasStone) {
       const c = Math.floor(SIZE / 2);
       return [[c, c]];
@@ -163,13 +198,17 @@
     return moves;
   }
 
-  // 공격+방어 가치로 정렬한 상위 후보
+  // 후보 수를 '공격 가치 + 방어 가치'로 점수 매겨 내림차순 정렬하고
+  // 상위 limit개만 돌려준다.
+  //  - 좋은 수를 먼저 탐색할수록 알파-베타 가지치기가 잘 일어나 탐색이 빨라진다.
+  //  - 방어 가치(상대가 그 자리에 뒀을 때의 가치)에 0.9를 곱해, 동등하면
+  //    공격을 약간 우선한다.
   function orderedMoves(board, player, limit) {
     const opp = opponent(player);
     const moves = generateMoves(board, 2);
     const scored = moves.map(([x, y]) => {
-      const atk = pointScore(board, x, y, player);
-      const def = pointScore(board, x, y, opp);
+      const atk = pointScore(board, x, y, player); // 내가 두면 얼마나 좋은가
+      const def = pointScore(board, x, y, opp); // 상대가 두면 얼마나 위험한가
       return { x, y, score: atk + def * 0.9 };
     });
     scored.sort((a, b) => b.score - a.score);
@@ -177,19 +216,30 @@
     return top.map((m) => [m.x, m.y]);
   }
 
-  const INNER_LIMIT = 10; // 내부 노드 분기 제한
+  const INNER_LIMIT = 10; // 내부(루트가 아닌) 노드에서 살펴볼 최대 후보 수
 
-  // 알파-베타 미니맥스 (PV 라인 반환)
+  // 알파-베타 가지치기 미니맥스.
+  //  - maximizing=true  : AI 차례(점수를 최대화)
+  //  - maximizing=false : 상대 차례(점수를 최소화)
+  //  - alpha: 지금까지 'AI가 최소한 확보한' 점수 하한
+  //  - beta : 지금까지 '상대가 허용하는' 점수 상한
+  //    → beta <= alpha 가 되면 더 봐도 결과가 안 바뀌므로 가지를 친다(break).
+  // 반환: { score, line } — line은 이 노드에서 이어지는 최선의 수순(PV) 일부.
+  //
+  // 주의: 이 함수는 board를 직접 수정했다가 되돌린다. 호출부(bestMove)는
+  //       반드시 '복사본'을 넘겨 원본 보드가 오염되지 않도록 한다.
   function minimax(board, depth, alpha, beta, maximizing, aiPlayer) {
     nodeCount++;
+    // 1024노드마다 한 번씩만 시계를 확인(Date.now 비용 절감). 예산 초과 시 탈출.
     if ((nodeCount & 1023) === 0 && Date.now() > deadline) throw ABORT;
 
+    // 잎 노드: 더 내려가지 않고 현재 국면을 정적 평가.
     if (depth === 0) {
       return { score: evaluateBoard(board, aiPlayer), line: [] };
     }
 
     const human = opponent(aiPlayer);
-    const current = maximizing ? aiPlayer : human;
+    const current = maximizing ? aiPlayer : human; // 이 노드에서 둘 사람
     const moves = orderedMoves(board, current, INNER_LIMIT);
     if (moves.length === 0) {
       return { score: evaluateBoard(board, aiPlayer), line: [] };
@@ -198,27 +248,32 @@
     let bestLine = [];
 
     if (maximizing) {
+      // --- AI 차례: 점수를 최대화 ---
       let best = -Infinity;
       for (const [x, y] of moves) {
-        board[y][x] = aiPlayer;
+        board[y][x] = aiPlayer; // 가상으로 둬본다
+        // 이 수로 바로 이기면 더 깊이 볼 필요 없음.
+        // 점수에 depth를 더해 '더 빨리(얕은 깊이에서) 이기는' 수를 선호.
         if (isWinningMove(board, x, y, aiPlayer)) {
           board[y][x] = EMPTY;
           return { score: SCORE.FIVE + depth, line: [[x, y]] };
         }
         const r = minimax(board, depth - 1, alpha, beta, false, aiPlayer);
-        board[y][x] = EMPTY;
+        board[y][x] = EMPTY; // 되돌리기 (백트래킹)
         if (r.score > best) {
           best = r.score;
-          bestLine = [[x, y], ...r.line];
+          bestLine = [[x, y], ...r.line]; // 이 수 + 이후 최선 수순
         }
         alpha = Math.max(alpha, best);
-        if (beta <= alpha) break;
+        if (beta <= alpha) break; // 베타 컷오프
       }
       return { score: best, line: bestLine };
     } else {
+      // --- 상대 차례: 점수를 최소화 ---
       let best = Infinity;
       for (const [x, y] of moves) {
         board[y][x] = human;
+        // 상대가 바로 이기면 AI에겐 최악. 빨리 지는 경우일수록 더 나쁘게 본다.
         if (isWinningMove(board, x, y, human)) {
           board[y][x] = EMPTY;
           return { score: -SCORE.FIVE - depth, line: [[x, y]] };
@@ -230,23 +285,25 @@
           bestLine = [[x, y], ...r.line];
         }
         beta = Math.min(beta, best);
-        if (beta <= alpha) break;
+        if (beta <= alpha) break; // 알파 컷오프
       }
       return { score: best, line: bestLine };
     }
   }
 
-  const ROOT_LIMIT = 16; // 루트 분기 제한
+  const ROOT_LIMIT = 16; // 루트에서 살펴볼 최대 후보 수 (내부보다 넓게)
 
-  // 루트 탐색: 모든 후보의 점수와 PV를 수집 (로그용)
+  // 루트(최상위) 탐색.
+  // minimax와 같은 일을 하되, '모든 후보 수의 점수와 PV'를 함께 모은다.
+  // → 로그 패널에서 "후보 평가"와 "예측 수순"을 보여주기 위함.
   function searchRoot(board, depth, aiPlayer) {
     const moves = orderedMoves(board, aiPlayer, ROOT_LIMIT);
     let alpha = -Infinity;
     const beta = Infinity;
     let best = -Infinity;
-    let bestMove = moves[0];
-    let bestLine = [moves[0]];
-    const scored = [];
+    let bestMove = moves[0]; // 최선의 한 수
+    let bestLine = [moves[0]]; // 그 수로 시작하는 최선 수순
+    const scored = []; // 후보별 {x, y, score, line}
 
     for (const [x, y] of moves) {
       board[y][x] = aiPlayer;
@@ -271,11 +328,13 @@
       alpha = Math.max(alpha, best);
     }
 
-    scored.sort((a, b) => b.score - a.score);
+    scored.sort((a, b) => b.score - a.score); // 좋은 후보 순으로 정렬(로그용)
     return { move: bestMove, score: best, line: bestLine, scored };
   }
 
-  // 라인([[x,y],...])을 플레이어 정보가 붙은 PV로 변환
+  // 좌표 배열 line([[x,y], ...])에 둘 사람 정보를 입힌 PV로 변환한다.
+  // 수순은 firstPlayer(보통 AI)부터 한 수씩 번갈아 두므로, 짝수 인덱스는
+  // firstPlayer, 홀수 인덱스는 상대 차례다.
   function lineToPV(line, firstPlayer) {
     return line.map(([x, y], idx) => ({
       x, y,
@@ -317,7 +376,8 @@
 
     const candidates = generateMoves(board, 2);
 
-    // 첫 수: 중앙
+    // --- 우선순위 0: 첫 수면 중앙(천원)에 둔다 ---
+    // generateMoves는 빈 판일 때 중앙 한 점만 반환한다.
     if (candidates.length === 1) {
       analysis.reason = 'opening';
       analysis.timeMs = Date.now() - t0;
@@ -325,7 +385,7 @@
       return { x: candidates[0][0], y: candidates[0][1], analysis };
     }
 
-    // 1) 즉시 승리
+    // --- 우선순위 1: 한 수로 바로 이길 수 있으면 즉시 둔다 ---
     for (const [x, y] of candidates) {
       board[y][x] = aiPlayer;
       const win = isWinningMove(board, x, y, aiPlayer);
@@ -339,7 +399,8 @@
       }
     }
 
-    // 2) 상대 즉시 승리 방어
+    // --- 우선순위 2: 상대가 다음 수에 이기는 자리면 막는다 ---
+    // (그 자리에 상대 돌을 가정해 5목이 되면, 같은 자리에 내가 둬서 차단)
     for (const [x, y] of candidates) {
       board[y][x] = human;
       const win = isWinningMove(board, x, y, human);
@@ -348,7 +409,7 @@
         analysis.reason = 'block';
         analysis.timeMs = Date.now() - t0;
         analysis.pv = lineToPV([[x, y]], aiPlayer);
-        // 방어 후 평가도 기록
+        // 막은 뒤의 국면도 평가해 점수로 기록(로그용)
         board[y][x] = aiPlayer;
         analysis.score = evaluateBoard(board, aiPlayer);
         board[y][x] = EMPTY;
@@ -356,9 +417,13 @@
       }
     }
 
-    // 3) 반복 심화 탐색
-    deadline = t0 + timeLimit;
-    let bestResult = null;
+    // --- 우선순위 3: 반복 심화(Iterative Deepening) 탐색 ---
+    // 깊이 2부터 1씩 늘려가며 매번 처음부터 다시 탐색한다.
+    // 언뜻 낭비 같지만: (1) 시간 예산이 끝나면 '마지막으로 완료한 깊이'의
+    // 결과를 그대로 쓸 수 있고, (2) 얕은 탐색의 결과가 깊은 탐색의 수 정렬을
+    // 도와 알파-베타 효율을 높인다.
+    deadline = t0 + timeLimit; // 이 시각을 넘기면 minimax가 ABORT를 던진다
+    let bestResult = null; // 마지막으로 '완료한' 깊이의 결과
 
     for (let depth = 2; depth <= maxDepth; depth++) {
       nodeCount = 0;
@@ -366,12 +431,14 @@
       try {
         result = searchRoot(board, depth, aiPlayer);
       } catch (e) {
-        if (e === ABORT) break; // 시간 초과: 직전 깊이 결과 유지
+        // 시간 초과로 중단됐다면 이 깊이는 미완성 → 버리고 직전 결과 사용
+        if (e === ABORT) break;
         throw e;
       }
 
-      bestResult = result;
+      bestResult = result; // 이 깊이를 끝까지 완료했으니 채택
       const elapsed = Date.now() - t0;
+      // 깊이별 진행 상황을 로그용으로 기록
       analysis.perDepth.push({
         depth,
         score: result.score,
@@ -382,29 +449,34 @@
       analysis.nodes += nodeCount;
       analysis.depth = depth;
 
-      // 강제 승리/패배 확정 시 조기 종료
+      // 승리/패배가 확정된 수순을 찾았으면 더 깊이 볼 필요 없음
       if (Math.abs(result.score) >= SCORE.FIVE) break;
-      // 시간 예산 초과 예상 시 종료
+      // 시간 예산을 이미 넘겼으면 다음(더 무거운) 깊이는 시작하지 않음
       if (elapsed > timeLimit) break;
     }
 
     if (!bestResult) {
-      // 폴백: 한 수 평가
+      // 만일 깊이 2조차 완료 못 했다면(극단적 시간 부족) 한 수 휴리스틱으로 폴백
       const ordered = orderedMoves(board, aiPlayer, 1);
       analysis.timeMs = Date.now() - t0;
       analysis.pv = lineToPV([ordered[0]], aiPlayer);
       return { x: ordered[0][0], y: ordered[0][1], analysis };
     }
 
+    // 최종 분석 정보 채우기
     analysis.score = bestResult.score;
     analysis.timeMs = Date.now() - t0;
-    analysis.pv = lineToPV(bestResult.line, aiPlayer);
+    analysis.pv = lineToPV(bestResult.line, aiPlayer); // 예측 수순
     analysis.topMoves = bestResult.scored.slice(0, 6).map((m) => ({
-      x: m.x, y: m.y, score: m.score,
+      x: m.x, y: m.y, score: m.score, // 상위 6개 후보와 점수
     }));
 
     return { x: bestResult.move[0], y: bestResult.move[1], analysis };
   }
+
+  // 외부(game.js)로 공개하는 API
+  // - bestMove: 다음 수 + 분석 반환 (탐색은 복사본에서, 원본 보드 불변)
+  // - isWinningMove / evaluateBoard / opponent: 보조 유틸
 
   global.OmokAI = {
     SIZE,
