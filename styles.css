@@ -1,0 +1,275 @@
+:root {
+  --bg: #10131c;
+  --panel: rgba(255, 255, 255, 0.08);
+  --panel-strong: rgba(255, 255, 255, 0.14);
+  --text: #f7f4ea;
+  --muted: #b9b3a4;
+  --accent: #ffb84d;
+  --accent-dark: #b56f00;
+  --line: #835b25;
+  --board: #d69a48;
+  --board-dark: #9e6420;
+  font-family: Inter, Pretendard, "Noto Sans KR", system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(255, 184, 77, 0.25), transparent 32rem),
+    radial-gradient(circle at bottom right, rgba(82, 125, 255, 0.2), transparent 28rem),
+    var(--bg);
+}
+
+button, input { font: inherit; }
+
+.app-shell {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 42px 0;
+}
+
+.hero, .controls, .game-layout, .panel, .status-card {
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 1fr minmax(240px, 360px);
+  gap: 24px;
+  align-items: stretch;
+  margin-bottom: 18px;
+  padding: 28px;
+  border-radius: 28px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05));
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2.3rem, 5vw, 4.8rem);
+  line-height: 0.95;
+}
+
+.subtitle {
+  max-width: 720px;
+  margin: 18px 0 0;
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
+
+.status-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  border-radius: 22px;
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.status-label {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+#statusText { font-size: 1.25rem; line-height: 1.45; }
+
+.controls {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  margin-bottom: 18px;
+  padding: 18px;
+  border-radius: 22px;
+  background: var(--panel);
+}
+
+.stone-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.stone-picker legend {
+  width: 100%;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.stone-picker label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+}
+
+.stone-picker input { accent-color: var(--accent); }
+
+#newGameButton {
+  border: 0;
+  border-radius: 999px;
+  padding: 14px 22px;
+  color: #211400;
+  background: linear-gradient(180deg, #ffd083, var(--accent));
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 12px 24px rgba(255, 184, 77, 0.22);
+}
+
+#newGameButton:hover { filter: brightness(1.06); }
+
+.game-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 720px) 1fr;
+  gap: 22px;
+  padding: 22px;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.board-wrap {
+  display: grid;
+  place-items: center;
+  overflow: auto;
+}
+
+.board {
+  --cell: min(4.25vw, 42px);
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(15, var(--cell));
+  grid-template-rows: repeat(15, var(--cell));
+  width: calc(var(--cell) * 15);
+  height: calc(var(--cell) * 15);
+  padding: 0;
+  border: 12px solid var(--board-dark);
+  border-radius: 18px;
+  background:
+    linear-gradient(var(--line) 1px, transparent 1px) center / var(--cell) var(--cell),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px) center / var(--cell) var(--cell),
+    radial-gradient(circle at 30% 20%, rgba(255,255,255,0.24), transparent 24rem),
+    var(--board);
+  box-shadow: inset 0 0 24px rgba(68, 34, 0, 0.3), 0 24px 48px rgba(0, 0, 0, 0.28);
+}
+
+.cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.cell:focus-visible {
+  outline: 3px solid #fff3c6;
+  outline-offset: -5px;
+}
+
+.cell::after {
+  content: "";
+  position: absolute;
+  width: 72%;
+  height: 72%;
+  border-radius: 50%;
+  transform: scale(0);
+  transition: transform 140ms ease;
+}
+
+.cell.black::after,
+.cell.white::after { transform: scale(1); }
+
+.cell.black::after {
+  background: radial-gradient(circle at 32% 28%, #737373, #141414 54%, #030303 100%);
+  box-shadow: 0 5px 10px rgba(0, 0, 0, 0.45);
+}
+
+.cell.white::after {
+  background: radial-gradient(circle at 32% 28%, #ffffff, #ece7db 58%, #bbb2a4 100%);
+  box-shadow: 0 5px 10px rgba(0, 0, 0, 0.22);
+}
+
+.cell.last-move::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  width: 18%;
+  height: 18%;
+  border-radius: 50%;
+  background: #e53e3e;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55);
+}
+
+.panel {
+  align-self: stretch;
+  padding: 24px;
+  border-radius: 22px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.panel h2 { margin: 0 0 14px; }
+.panel ul { margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.8; }
+
+.legend {
+  display: grid;
+  gap: 10px;
+  margin-top: 24px;
+  color: var(--muted);
+}
+
+.legend div { display: flex; align-items: center; gap: 10px; }
+
+.stone {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.stone.black { background: radial-gradient(circle at 32% 28%, #777, #080808 70%); }
+.stone.white { background: radial-gradient(circle at 32% 28%, #fff, #d8d0c2 75%); }
+
+.thinking {
+  margin: 24px 0 0;
+  color: var(--accent);
+  font-weight: 800;
+}
+
+@media (max-width: 860px) {
+  .hero, .game-layout { grid-template-columns: 1fr; }
+  .controls { align-items: stretch; flex-direction: column; }
+  #newGameButton { width: 100%; }
+  .board { --cell: min(5.75vw, 38px); }
+}
+
+@media (max-width: 520px) {
+  .app-shell { width: min(100% - 16px, 1180px); padding: 18px 0; }
+  .hero, .game-layout { padding: 14px; border-radius: 20px; }
+  .board { --cell: calc((100vw - 64px) / 15); border-width: 8px; }
+}

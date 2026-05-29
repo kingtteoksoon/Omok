@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>미친 난이도 오목 AI</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero" aria-labelledby="title">
+        <div>
+          <p class="eyebrow">Gomoku vs Computer</p>
+          <h1 id="title">개미친 어려움 오목</h1>
+          <p class="subtitle">
+            공격 수, 즉승 수, 열린 4·3 위협을 동시에 계산하는 하드코어 AI와 15×15 판에서 승부하세요.
+          </p>
+        </div>
+        <div class="status-card" aria-live="polite">
+          <span class="status-label">현재 상태</span>
+          <strong id="statusText">돌 색을 선택하고 시작하세요.</strong>
+        </div>
+      </section>
+
+      <section class="controls" aria-label="게임 설정">
+        <fieldset class="stone-picker">
+          <legend>플레이어 돌 선택</legend>
+          <label>
+            <input type="radio" name="playerStone" value="black" checked />
+            <span class="stone black" aria-hidden="true"></span>
+            흑돌 · 선공
+          </label>
+          <label>
+            <input type="radio" name="playerStone" value="white" />
+            <span class="stone white" aria-hidden="true"></span>
+            백돌 · 후공
+          </label>
+        </fieldset>
+        <button id="newGameButton" type="button">새 게임 시작</button>
+      </section>
+
+      <section class="game-layout">
+        <div class="board-wrap">
+          <div id="board" class="board" role="grid" aria-label="15 곱하기 15 오목판"></div>
+        </div>
+        <aside class="panel" aria-label="게임 정보">
+          <h2>AI 난이도: 개미친 어려움</h2>
+          <ul>
+            <li>즉시 승리와 즉시 방어 수를 최우선으로 탐색합니다.</li>
+            <li>중앙 장악, 열린 4, 닫힌 4, 열린 3 위협을 점수화합니다.</li>
+            <li>후보 수를 압축한 알파-베타 미니맥스로 다음 수를 고릅니다.</li>
+          </ul>
+          <div class="legend">
+            <div><span class="stone black"></span> 흑돌</div>
+            <div><span class="stone white"></span> 백돌</div>
+          </div>
+          <p id="thinkingText" class="thinking" hidden>컴퓨터가 다음 수를 계산 중입니다…</p>
+        </aside>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
