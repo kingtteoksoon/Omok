@@ -62,14 +62,31 @@
   let training = false;
   let cancelFlag = false;
 
+  // 내장 기본 패턴(default-learning.js)이 로드돼 있으면 그 가중치/경험북을
+  // 시드로 쓴다. 없으면 AI의 순정 가중치 + 빈 경험북으로 시작한다.
+  //  → 첫 방문(저장 데이터 없음)에도 학습된 AI와 바로 대결할 수 있다.
+  //  → 승패 통계/로그는 플레이 이력이므로 시드하지 않고 0부터 집계한다.
   function defaultState() {
+    const seed = global.OmokDefaultLearn || null;
     return {
       version: SCHEMA_VERSION,
-      weights: AI.getWeights(), // 기본 가중치
-      book: {}, // posKey -> { moveKey -> {n, w} }
+      weights: seed && seed.weights ? Object.assign({}, seed.weights) : AI.getWeights(),
+      book: seed && seed.book ? deepCopyBook(seed.book) : {},
       stats: { games: 0, aiWins: 0, humanWins: 0, draws: 0, trainIters: 0 },
       logs: [], // 최근 대국 로그
     };
+  }
+
+  // 경험북(중첩 객체)을 깊은 복사해, 시드 원본이 플레이 중 변형되지 않게 한다.
+  function deepCopyBook(book) {
+    const out = {};
+    for (const posKey in book) {
+      const node = book[posKey];
+      const copy = {};
+      for (const mk in node) copy[mk] = { n: node[mk].n, w: node[mk].w };
+      out[posKey] = copy;
+    }
+    return out;
   }
 
   // ---- 저장/불러오기 ----
