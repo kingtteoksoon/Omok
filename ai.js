@@ -87,12 +87,87 @@
   let nodeCount = 0;
   let deadline = Infinity;
 
+  /* ==========================================================================
+   *  트랜스포지션 테이블 (Zobrist 해싱)
+   * --------------------------------------------------------------------------
+   *  같은 국면을 여러 경로로 도달해도 매번 재계산하지 않고 캐싱해 재사용한다.
+   *  같은 시간에 훨씬 깊은 탐색이 가능해진다.
+   *
+   *  Zobrist 해시: 각 칸(y,x)의 돌 색마다 랜덤 32비트 정수를 배정하고,
+   *  보드 위 모든 돌의 값을 XOR해 하나의 해시값으로 만든다.
+   *  돌을 놓거나 뗄 때마다 해당 칸의 값을 XOR하면 O(1)로 갱신된다.
+   * ======================================================================== */
+  const ZOBRIST_TABLE = (() => {
+    const t = [];
+    for (let y = 0; y < SIZE; y++) {
+      t[y] = [];
+      for (let x = 0; x < SIZE; x++) {
+        t[y][x] = [
+          (Math.random() * 0x100000000) >>> 0, // 흑(player 1) 랜덤 32비트
+          (Math.random() * 0x100000000) >>> 0, // 백(player 2)
+        ];
+      }
+    }
+    return t;
+  })();
+
+  // TT 크기: 2^19 = 524 288 엔트리. 각 엔트리: { hash, depth, flag, score, move }
+  const TT_BITS  = 19;
+  const TT_SIZE  = 1 << TT_BITS;
+  const TT_MASK  = TT_SIZE - 1;
+  const TT       = new Array(TT_SIZE).fill(null);
+  const TT_EXACT = 0; // 정확한 minimax 값
+  const TT_LOWER = 1; // 하한 (베타 컷오프로 더 높을 수 있음)
+  const TT_UPPER = 2; // 상한 (알파 컷오프로 더 낮을 수 있음)
+
+  /* ==========================================================================
+   *  Killer Move 휴리스틱
+   * --------------------------------------------------------------------------
+   *  같은 깊이(ply)에서 베타 컷오프를 일으킨 수('킬러')를 기억해 두었다가
+   *  형제 노드에서 먼저 시도한다. 좋은 수를 일찍 탐색할수록 가지치기가 잘
+   *  일어나 탐색 속도가 향상된다. 각 ply당 최대 2개를 저장한다.
+   * ======================================================================== */
+  const killers = []; // killers[ply] = [[x1,y1], [x2,y2]]
+
   function inBounds(x, y) {
     return x >= 0 && x < SIZE && y >= 0 && y < SIZE;
   }
 
   function opponent(player) {
     return player === 1 ? 2 : 1;
+  }
+
+  // 보드의 Zobrist 해시를 처음부터 계산한다.
+  // bestMove 시작 시 한 번만 호출하고, 이후에는 XOR 증분 갱신으로 O(1) 유지.
+  function computeHash(board) {
+    let h = 0;
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE; x++) {
+        const v = board[y][x];
+        if (v !== EMPTY) h = (h ^ ZOBRIST_TABLE[y][x][v - 1]) | 0;
+      }
+    }
+    return h;
+  }
+
+  // 후보 수 배열 moves 앞에 힌트(TT 최선 수·킬러)를 삽입한다.
+  // 힌트가 moves 안에 있을 때만 앞으로 옮기고 중복은 제거한다.
+  // → 좋은 수를 먼저 탐색 → 알파-베타 가지치기 효율 향상.
+  function prependHints(moves, hints) {
+    const rawSet = new Set(moves.map(([x, y]) => y * SIZE + x));
+    const added  = new Set();
+    const result = [];
+    for (const h of hints) {
+      if (!h) continue;
+      const [hx, hy] = h;
+      const key = hy * SIZE + hx;
+      if (rawSet.has(key) && !added.has(key)) { added.add(key); result.push([hx, hy]); }
+    }
+    for (const [x, y] of moves) {
+      const key = y * SIZE + x;
+      if (!added.has(key)) { added.add(key); result.push([x, y]); }
+    }
+    return result;
   }
 
   // (x,y)에 player 돌을 놓는다고 가정하고, (dx,dy) 축에서 만들어지는 모양의
@@ -316,77 +391,96 @@
 
   const INNER_LIMIT = 10; // 내부(루트가 아닌) 노드에서 살펴볼 최대 후보 수
 
-  // 알파-베타 가지치기 미니맥스.
+  // 알파-베타 가지치기 미니맥스 (트랜스포지션 테이블 + Killer Move 통합).
   //  - maximizing=true  : AI 차례(점수를 최대화)
   //  - maximizing=false : 상대 차례(점수를 최소화)
   //  - alpha: 지금까지 'AI가 최소한 확보한' 점수 하한
   //  - beta : 지금까지 '상대가 허용하는' 점수 상한
-  //    → beta <= alpha 가 되면 더 봐도 결과가 안 바뀌므로 가지를 친다(break).
-  // 반환: { score, line } — line은 이 노드에서 이어지는 최선의 수순(PV) 일부.
+  //  - hash : 현재 보드의 Zobrist 해시 (TT 색인용)
+  //  - ply  : 루트에서 현재 노드까지의 깊이 (Killer 색인용, 루트=0)
   //
-  // 주의: 이 함수는 board를 직접 수정했다가 되돌린다. 호출부(bestMove)는
-  //       반드시 '복사본'을 넘겨 원본 보드가 오염되지 않도록 한다.
-  function minimax(board, depth, alpha, beta, maximizing, aiPlayer) {
+  // 주의: board를 직접 수정했다가 되돌린다. 호출부(bestMove)는 반드시
+  //       '복사본'을 넘겨 원본이 오염되지 않도록 한다.
+  function minimax(board, depth, alpha, beta, maximizing, aiPlayer, hash, ply) {
     nodeCount++;
-    // 1024노드마다 한 번씩만 시계를 확인(Date.now 비용 절감). 예산 초과 시 탈출.
     if ((nodeCount & 1023) === 0 && Date.now() > deadline) throw ABORT;
 
-    // 잎 노드: 더 내려가지 않고 현재 국면을 정적 평가.
+    // ----- 트랜스포지션 테이블 탐색 -----
+    const ttKey   = (hash >>> 0) & TT_MASK;
+    const ttEntry = TT[ttKey];
+    let ttMove    = null;
+    if (ttEntry && ttEntry.hash === hash) {
+      ttMove = ttEntry.move; // 이전 탐색의 최선 수 → 수 정렬 힌트로만 사용
+      if (ttEntry.depth >= depth) {
+        const s = ttEntry.score;
+        if      (ttEntry.flag === TT_EXACT)              return { score: s, line: ttMove ? [ttMove] : [] };
+        else if (ttEntry.flag === TT_LOWER && s >= beta)  return { score: s, line: [] };
+        else if (ttEntry.flag === TT_UPPER && s <= alpha) return { score: s, line: [] };
+      }
+    }
+
+    // 잎 노드: 정적 평가 후 TT에 저장
     if (depth === 0) {
-      return { score: evaluateBoard(board, aiPlayer), line: [] };
+      const s = evaluateBoard(board, aiPlayer);
+      TT[ttKey] = { hash, depth: 0, flag: TT_EXACT, score: s, move: null };
+      return { score: s, line: [] };
     }
 
-    const human = opponent(aiPlayer);
-    const current = maximizing ? aiPlayer : human; // 이 노드에서 둘 사람
-    const moves = orderedMoves(board, current, INNER_LIMIT);
-    if (moves.length === 0) {
-      return { score: evaluateBoard(board, aiPlayer), line: [] };
-    }
+    const human   = opponent(aiPlayer);
+    const current = maximizing ? aiPlayer : human;
+    const rawMoves = orderedMoves(board, current, INNER_LIMIT);
+    if (rawMoves.length === 0) return { score: evaluateBoard(board, aiPlayer), line: [] };
 
+    // 수 정렬 강화: TT 최선 수 → 킬러 → 나머지 정렬된 수
+    // 좋은 수를 먼저 탐색할수록 알파-베타가 더 많은 가지를 친다.
+    const moves = prependHints(rawMoves, [ttMove, ...(killers[ply] || [])]);
+
+    let best = maximizing ? -Infinity : Infinity;
     let bestLine = [];
+    let bestMoveForTT = null;
+    let cutoff = false;
 
-    if (maximizing) {
-      // --- AI 차례: 점수를 최대화 ---
-      let best = -Infinity;
-      for (const [x, y] of moves) {
-        board[y][x] = aiPlayer; // 가상으로 둬본다
-        // 이 수로 바로 이기면 더 깊이 볼 필요 없음.
-        // 점수에 depth를 더해 '더 빨리(얕은 깊이에서) 이기는' 수를 선호.
-        if (isWinningMove(board, x, y, aiPlayer)) {
-          board[y][x] = EMPTY;
-          return { score: SCORE.FIVE + depth, line: [[x, y]] };
-        }
-        const r = minimax(board, depth - 1, alpha, beta, false, aiPlayer);
-        board[y][x] = EMPTY; // 되돌리기 (백트래킹)
-        if (r.score > best) {
-          best = r.score;
-          bestLine = [[x, y], ...r.line]; // 이 수 + 이후 최선 수순
-        }
-        alpha = Math.max(alpha, best);
-        if (beta <= alpha) break; // 베타 컷오프
-      }
-      return { score: best, line: bestLine };
-    } else {
-      // --- 상대 차례: 점수를 최소화 ---
-      let best = Infinity;
-      for (const [x, y] of moves) {
-        board[y][x] = human;
-        // 상대가 바로 이기면 AI에겐 최악. 빨리 지는 경우일수록 더 나쁘게 본다.
-        if (isWinningMove(board, x, y, human)) {
-          board[y][x] = EMPTY;
-          return { score: -SCORE.FIVE - depth, line: [[x, y]] };
-        }
-        const r = minimax(board, depth - 1, alpha, beta, true, aiPlayer);
+    for (const [x, y] of moves) {
+      // 돌을 놓을 때 해시를 XOR로 O(1) 갱신 (역방향도 XOR이므로 제거 시 같은 연산)
+      const moveHash = (hash ^ ZOBRIST_TABLE[y][x][current - 1]) | 0;
+      board[y][x] = current;
+
+      if (isWinningMove(board, x, y, current)) {
         board[y][x] = EMPTY;
-        if (r.score < best) {
-          best = r.score;
-          bestLine = [[x, y], ...r.line];
-        }
-        beta = Math.min(beta, best);
-        if (beta <= alpha) break; // 알파 컷오프
+        const s = maximizing ? SCORE.FIVE + depth : -SCORE.FIVE - depth;
+        TT[ttKey] = { hash, depth, flag: TT_EXACT, score: s, move: [x, y] };
+        return { score: s, line: [[x, y]] };
       }
-      return { score: best, line: bestLine };
+
+      const r = minimax(board, depth - 1, alpha, beta, !maximizing, aiPlayer, moveHash, ply + 1);
+      board[y][x] = EMPTY;
+
+      if (maximizing) {
+        if (r.score > best) { best = r.score; bestLine = [[x, y], ...r.line]; bestMoveForTT = [x, y]; }
+        alpha = Math.max(alpha, best);
+        if (alpha >= beta) {
+          cutoff = true;
+          // 베타 컷오프 — 킬러로 저장해 형제 노드에서 먼저 시도
+          const k = killers[ply] || (killers[ply] = []);
+          if (!k[0] || k[0][0] !== x || k[0][1] !== y) { k[1] = k[0]; k[0] = [x, y]; }
+          break;
+        }
+      } else {
+        if (r.score < best) { best = r.score; bestLine = [[x, y], ...r.line]; bestMoveForTT = [x, y]; }
+        beta = Math.min(beta, best);
+        if (beta <= alpha) {
+          cutoff = true;
+          const k = killers[ply] || (killers[ply] = []);
+          if (!k[0] || k[0][0] !== x || k[0][1] !== y) { k[1] = k[0]; k[0] = [x, y]; }
+          break;
+        }
+      }
     }
+
+    // 컷오프 없이 끝나면 exact(정확한 값), 컷오프면 방향에 따라 하한/상한으로 저장
+    const flag = cutoff ? (maximizing ? TT_LOWER : TT_UPPER) : TT_EXACT;
+    TT[ttKey] = { hash, depth, flag, score: best, move: bestMoveForTT };
+    return { score: best, line: bestLine };
   }
 
   const ROOT_LIMIT = 16; // 루트에서 살펴볼 최대 후보 수 (내부보다 넓게)
@@ -394,23 +488,31 @@
   // 루트(최상위) 탐색.
   // minimax와 같은 일을 하되, '모든 후보 수의 점수와 PV'를 함께 모은다.
   // → 로그 패널에서 "후보 평가"와 "예측 수순"을 보여주기 위함.
-  function searchRoot(board, depth, aiPlayer) {
-    const moves = orderedMoves(board, aiPlayer, ROOT_LIMIT);
+  // hash: 현재 보드의 Zobrist 해시 (TT 활용 및 자식 노드 해시 갱신용)
+  function searchRoot(board, depth, aiPlayer, hash) {
+    const rawMoves = orderedMoves(board, aiPlayer, ROOT_LIMIT);
+    // 루트에서도 TT 최선 수와 킬러를 앞에 배치해 첫 탐색부터 좋은 수를 먼저 본다
+    const ttKey   = (hash >>> 0) & TT_MASK;
+    const ttEntry = TT[ttKey];
+    const ttMove  = (ttEntry && ttEntry.hash === hash) ? ttEntry.move : null;
+    const moves   = prependHints(rawMoves, [ttMove, ...(killers[0] || [])]);
+
     let alpha = -Infinity;
     const beta = Infinity;
     let best = -Infinity;
-    let bestMove = moves[0]; // 최선의 한 수
-    let bestLine = [moves[0]]; // 그 수로 시작하는 최선 수순
-    const scored = []; // 후보별 {x, y, score, line}
+    let bestMove = moves[0];
+    let bestLine = [moves[0]];
+    const scored = [];
 
     for (const [x, y] of moves) {
+      const moveHash = (hash ^ ZOBRIST_TABLE[y][x][aiPlayer - 1]) | 0;
       board[y][x] = aiPlayer;
       let val, line;
       if (isWinningMove(board, x, y, aiPlayer)) {
         val = SCORE.FIVE + depth;
         line = [];
       } else {
-        const r = minimax(board, depth - 1, alpha, beta, false, aiPlayer);
+        const r = minimax(board, depth - 1, alpha, beta, false, aiPlayer, moveHash, 1);
         val = r.score;
         line = r.line;
       }
@@ -418,15 +520,13 @@
 
       const fullLine = [[x, y], ...line];
       scored.push({ x, y, score: val, line: fullLine });
-      if (val > best) {
-        best = val;
-        bestMove = [x, y];
-        bestLine = fullLine;
-      }
+      if (val > best) { best = val; bestMove = [x, y]; bestLine = fullLine; }
       alpha = Math.max(alpha, best);
     }
 
-    scored.sort((a, b) => b.score - a.score); // 좋은 후보 순으로 정렬(로그용)
+    // 이 깊이의 최선 수를 TT에 저장해 다음 반복 심화 때 수 정렬을 돕는다
+    TT[ttKey] = { hash, depth, flag: TT_EXACT, score: best, move: bestMove };
+    scored.sort((a, b) => b.score - a.score);
     return { move: bestMove, score: best, line: bestLine, scored };
   }
 
@@ -458,6 +558,8 @@
     // 건너뛸 수 있다. 원본 보드를 넘기면 가상으로 둔 돌이 실제로 남아버린다.
     // 복사본을 쓰면 원본은 절대 변경되지 않으므로 AI는 "생각만" 한다.
     board = board.map((row) => row.slice());
+    // 복사본 기준으로 초기 Zobrist 해시를 계산한다 (이후 탐색 내에서 XOR로 갱신).
+    const initialHash = computeHash(board);
 
     const human = opponent(aiPlayer);
     const t0 = Date.now();
@@ -528,9 +630,10 @@
 
     for (let depth = 2; depth <= maxDepth; depth++) {
       nodeCount = 0;
+      killers.length = 0; // 반복 심화 매 깊이마다 킬러를 초기화 (이전 깊이의 수가 오도할 수 있음)
       let result;
       try {
-        result = searchRoot(board, depth, aiPlayer);
+        result = searchRoot(board, depth, aiPlayer, initialHash);
       } catch (e) {
         // 시간 초과로 중단됐다면 이 깊이는 미완성 → 버리고 직전 결과 사용
         if (e === ABORT) break;
