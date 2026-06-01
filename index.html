@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>♟ Gomoku Pro AI — 프로기사 수준 오목 엔진</title>
+  <link rel="stylesheet" href="styles/main.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>♟ Gomoku&nbsp;Pro&nbsp;AI</h1>
+    <span class="subtitle">19×19 · 렌주(흑 3-3/장목 금수) · MCTS / Alpha-Beta / 강화학습</span>
+    <span id="status" class="status">준비 중…</span>
+  </header>
+
+  <main class="layout">
+    <!-- 바둑판 -->
+    <section class="board-wrap">
+      <canvas id="board" width="640" height="640" aria-label="오목판"></canvas>
+    </section>
+
+    <!-- 우측 분석/제어 패널 -->
+    <aside class="panel">
+      <!-- 승률 -->
+      <div class="card">
+        <h2>승률 분석</h2>
+        <div class="winrow"><span>AI 승률</span><strong id="ai-winrate">50.0%</strong></div>
+        <div class="winrow"><span>플레이어 승률</span><strong id="player-winrate">50.0%</strong></div>
+        <div class="winbar">
+          <div id="winbar-ai" class="winbar-ai" style="width:50%"></div>
+          <div id="winbar-player" class="winbar-player" style="width:50%"></div>
+        </div>
+        <div id="advantage" class="advantage even">예상 우세: 호각세 (Even)</div>
+      </div>
+
+      <!-- AI 분석 -->
+      <div class="card">
+        <h2>AI 분석</h2>
+        <div class="kv"><span>위협 레벨</span><b id="threat-level">-</b></div>
+        <div class="kv"><span>후보 수</span><b id="candidate-count">-</b></div>
+        <div class="kv"><span>탐색 엔진</span><b id="engine-name">-</b></div>
+        <div class="kv"><span>사고 시간</span><b id="think-time">-</b></div>
+        <p class="hint">💡 브라우저 콘솔(F12)에서 AI의 상세 사고과정을 확인하세요.</p>
+      </div>
+
+      <!-- 게임 제어 -->
+      <div class="card">
+        <h2>게임</h2>
+        <div class="btns">
+          <button id="btn-new-ai-black">AI 대국 (내가 흑)</button>
+          <button id="btn-new-ai-white">AI 대국 (내가 백)</button>
+          <button id="btn-new-pvp">2인 대전 (PvP)</button>
+          <button id="btn-undo" class="ghost">무르기</button>
+        </div>
+        <div class="kv">
+          <span>난이도(사고시간)</span>
+          <select id="difficulty">
+            <option value="500">빠름 0.5s</option>
+            <option value="1500" selected>보통 1.5s</option>
+            <option value="3000">강함 3s</option>
+          </select>
+        </div>
+        <div class="kv">
+          <span>탐색 엔진</span>
+          <select id="engine-mode">
+            <option value="hybrid" selected>Hybrid (Alpha-Beta+위협)</option>
+            <option value="alphabeta">Alpha-Beta</option>
+            <option value="mcts">MCTS</option>
+          </select>
+        </div>
+        <label class="chk"><input type="checkbox" id="toggle-overlay" checked /> AI 후보 시각화</label>
+        <label class="chk"><input type="checkbox" id="toggle-forbidden" checked /> 흑 금수 표시</label>
+      </div>
+
+      <!-- 학습 -->
+      <div class="card">
+        <h2>학습 시스템</h2>
+        <div class="kv"><span>총 대국</span><b id="stat-games">0</b></div>
+        <div class="kv"><span>AI 승</span><b id="stat-aiwins">0</b></div>
+        <div class="kv"><span>플레이어 승</span><b id="stat-humanwins">0</b></div>
+        <div class="kv"><span>학습 반복</span><b id="stat-iters">0</b></div>
+        <div class="kv"><span>상대 스타일</span><b id="opp-style">-</b></div>
+        <div class="kv"><span>상대 공격성</span><b id="opp-agg">-</b></div>
+        <div class="selfplay">
+          <input type="number" id="selfplay-count" value="50" min="1" max="100000" />
+          <button id="btn-selfplay">Self-Play 학습</button>
+        </div>
+        <div id="selfplay-progress" class="progress"></div>
+        <button id="btn-export" class="ghost wide">학습 데이터 내보내기(JSON)</button>
+      </div>
+
+      <div class="card legend">
+        <h2>시각화 범례</h2>
+        <span class="dot green"></span> 유망 수
+        <span class="dot yellow"></span> 주의 수
+        <span class="dot red"></span> 위험 수
+        <span class="dot select"></span> 선택 수
+      </div>
+    </aside>
+  </main>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

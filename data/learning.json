@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "boardSize": 19,
+  "weights": {
+    "OPEN_THREE": 1.2265763393183848,
+    "THREE": 0.4750967256389384,
+    "OPEN_TWO": 2.3253283039423933,
+    "TWO": 2.5416949211360786,
+    "ONE": 0.7009387925676465,
+    "defense": 1.3751492471902713
+  },
+  "book": {},
+  "opponent": {
+    "style": "balanced",
+    "aggression": 0.5,
+    "defense": 0.5,
+    "samples": 0,
+    "favorite": {}
+  },
+  "stats": {
+    "games": 0,
+    "aiWins": 0,
+    "humanWins": 0,
+    "draws": 0,
+    "trainIters": 0
+  },
+  "logs": []
+}

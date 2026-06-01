@@ -1,0 +1,101 @@
+/* main.css — Gomoku Pro AI 스타일.
+   설계: PC 우선, 모바일 대응(반응형). 다크 테마 + 가독성 높은 분석 패널.
+   레이아웃은 CSS Grid/Flex로 보드(좌)·패널(우) 2열, 좁은 화면에선 1열로 전환. */
+
+:root {
+  --bg: #12151c;
+  --card: #1b2030;
+  --line: #2a3145;
+  --text: #e7ecf5;
+  --muted: #9aa6bd;
+  --accent: #4ea1ff;
+  --ai: #e35d6a;
+  --player: #39d353;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+  min-height: 100vh;
+}
+
+.topbar {
+  display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  padding: 14px 22px; border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, #161b27, #12151c);
+}
+.topbar h1 { margin: 0; font-size: 22px; }
+.subtitle { color: var(--muted); font-size: 13px; }
+.status { margin-left: auto; font-weight: 700; font-size: 15px; }
+
+.layout {
+  display: grid; grid-template-columns: minmax(320px, 1fr) 360px;
+  gap: 20px; padding: 20px; max-width: 1200px; margin: 0 auto;
+}
+@media (max-width: 880px) { .layout { grid-template-columns: 1fr; } }
+
+.board-wrap {
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 14px; display: flex; align-items: center; justify-content: center;
+}
+#board {
+  width: 100%; aspect-ratio: 1 / 1; max-width: 640px; height: auto;
+  border-radius: 8px; cursor: pointer; touch-action: manipulation;
+}
+
+.panel { display: flex; flex-direction: column; gap: 14px; }
+.card {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 14px; padding: 14px 16px;
+}
+.card h2 { margin: 0 0 10px; font-size: 14px; color: var(--accent); letter-spacing: .3px; }
+
+.winrow { display: flex; justify-content: space-between; margin: 4px 0; font-size: 14px; }
+.winrow strong { font-variant-numeric: tabular-nums; }
+.winbar {
+  display: flex; height: 14px; border-radius: 8px; overflow: hidden;
+  margin: 8px 0; background: #0e1118;
+}
+.winbar-ai { background: var(--ai); transition: width .4s ease; }
+.winbar-player { background: var(--player); transition: width .4s ease; }
+.advantage {
+  text-align: center; font-weight: 700; font-size: 14px;
+  padding: 6px; border-radius: 8px; margin-top: 6px;
+}
+.advantage.even { background: #243; color: #cfe; }
+.advantage.ai { background: #3a1d22; color: #ffb3ba; }
+.advantage.player { background: #14331f; color: #b6f5c6; }
+
+.kv { display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin: 6px 0; color: var(--muted); }
+.kv b { color: var(--text); font-variant-numeric: tabular-nums; }
+.hint { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+button {
+  background: var(--accent); color: #06203d; border: none; border-radius: 9px;
+  padding: 9px 10px; font-weight: 700; cursor: pointer; font-size: 13px;
+}
+button:hover { filter: brightness(1.08); }
+button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+button.wide { grid-column: 1 / -1; width: 100%; margin-top: 8px; }
+
+select, input[type="number"] {
+  background: #0e1118; color: var(--text); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 8px; font-size: 13px;
+}
+.chk { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin: 6px 0; }
+
+.selfplay { display: flex; gap: 8px; margin-top: 8px; }
+.selfplay input { width: 90px; }
+.selfplay button { flex: 1; }
+.progress { font-size: 12px; color: var(--accent); margin-top: 6px; min-height: 14px; }
+
+.legend { font-size: 13px; color: var(--muted); }
+.dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin: 0 4px 0 10px; vertical-align: middle; }
+.dot.green { background: #39d353; }
+.dot.yellow { background: #f0c828; }
+.dot.red { background: #e63c3c; }
+.dot.select { background: #4ea1ff; }
