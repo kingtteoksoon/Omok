@@ -29,8 +29,8 @@ export class Minimax {
   constructor(evaluator, opt = {}) {
     this.ev = evaluator;
     this.width = opt.width ?? 12;        // 노드당 후보 폭
-    this.maxDepth = opt.maxDepth ?? 6;   // 최대 깊이
-    this.timeMs = opt.timeMs ?? 1500;    // 시간 예산
+    this.maxDepth = opt.maxDepth ?? 12;   // 최대 깊이
+    this.timeMs = opt.timeMs ?? 3000;    // 시간 예산
     this.nodes = 0;
   }
 

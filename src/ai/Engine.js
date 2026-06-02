@@ -35,9 +35,9 @@ export class Engine {
   constructor(opt = {}) {
     this.ev = new Evaluator(opt.weights);
     this.mode = opt.mode ?? 'hybrid';
-    this.timeMs = opt.timeMs ?? 1500;
+    this.timeMs = opt.timeMs ?? 3000;
     this.learner = opt.learner ?? null;   // 오프닝 북·전략 적응 제공자(선택)
-    this.minimax = new Minimax(this.ev, { timeMs: this.timeMs, maxDepth: 6, width: 12 });
+    this.minimax = new Minimax(this.ev, { timeMs: this.timeMs, maxDepth: 10, width: 15 });
     this.mcts = new MCTS(this.ev, { timeMs: this.timeMs, iterations: 6000 });
     this.winrate = new WinRate(this.ev);
     this.verbose = opt.verbose ?? true;   // 콘솔 사고과정 출력 여부

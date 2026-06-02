@@ -28,7 +28,7 @@ export class SelfPlay {
    */
   constructor(learner, opt = {}) {
     this.learner = learner;
-    this.timeMs = opt.timeMs ?? 120;        // 자가대국은 빠르게(짧은 예산)
+    this.timeMs = opt.timeMs ?? 300;        // 자가대국은 빠르게(짧은 예산)
     this.maxMoves = opt.maxMoves ?? 225;
     this.explore = opt.explore ?? true;     // 초반 무작위 분산(다양성)
     this.stop = false;

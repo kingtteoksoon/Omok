@@ -25,7 +25,7 @@ async function boot() {
   const engine = new Engine({
     weights: learner.weights,
     mode: 'hybrid',
-    timeMs: 1500,
+    timeMs: 3000,
     learner,
     verbose: true,
   });
@@ -71,7 +71,7 @@ async function boot() {
   $('btn-selfplay').onclick = async () => {
     const n = +$('selfplay-count').value || 50;
     if (selfplay) { selfplay.cancel(); selfplay = null; $('btn-selfplay').textContent = 'Self-Play 학습'; return; }
-    selfplay = new SelfPlay(learner, { timeMs: 80 });
+    selfplay = new SelfPlay(learner, { timeMs: 300 });
     $('btn-selfplay').textContent = '중지';
     console.log(`%c[Self-Play] training ${n} games…`, 'color:#fc6;font-weight:bold');
     await selfplay.run(n, (done, total, stats) => {

@@ -42,8 +42,8 @@ export class MCTS {
   constructor(evaluator, opt = {}) {
     this.ev = evaluator;
     this.iterations = opt.iterations ?? 4000;
-    this.timeMs = opt.timeMs ?? 1200;
-    this.c = opt.c ?? 1.4;             // 탐험 상수
+    this.timeMs = opt.timeMs ?? 3000;
+    this.c = opt.c ?? 1.1;             // 탐험 상수
     this.expandWidth = opt.expandWidth ?? 10;
     this.rolloutLen = opt.rolloutLen ?? 12;
   }

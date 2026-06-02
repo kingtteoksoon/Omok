@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>♟ Gomoku Pro AI — 프로기사 수준 오목 엔진</title>
+  <title>오목이나 하쇼</title>
   <link rel="stylesheet" href="styles/main.css" />
 </head>
 <body>
   <header class="topbar">
-    <h1>♟ Gomoku&nbsp;Pro&nbsp;AI</h1>
+    <h1>♟</h1>
     <span class="subtitle">19×19 · 렌주(흑 3-3/장목 금수) · MCTS / Alpha-Beta / 강화학습</span>
     <span id="status" class="status">준비 중…</span>
   </header>
@@ -40,15 +40,15 @@
         <div class="kv"><span>후보 수</span><b id="candidate-count">-</b></div>
         <div class="kv"><span>탐색 엔진</span><b id="engine-name">-</b></div>
         <div class="kv"><span>사고 시간</span><b id="think-time">-</b></div>
-        <p class="hint">💡 브라우저 콘솔(F12)에서 AI의 상세 사고과정을 확인하세요.</p>
+        <p class="hint">브라우저 콘솔에서 AI의 상세 사고과정을 확인하세요.</p>
       </div>
 
       <!-- 게임 제어 -->
       <div class="card">
         <h2>게임</h2>
         <div class="btns">
-          <button id="btn-new-ai-black">AI 대국 (내가 흑)</button>
-          <button id="btn-new-ai-white">AI 대국 (내가 백)</button>
+          <button id="btn-new-ai-black">AI 대국 (흑)</button>
+          <button id="btn-new-ai-white">AI 대국 (백)</button>
           <button id="btn-new-pvp">2인 대전 (PvP)</button>
           <button id="btn-undo" class="ghost">무르기</button>
         </div>
@@ -56,14 +56,14 @@
           <span>난이도(사고시간)</span>
           <select id="difficulty">
             <option value="500">빠름 0.5s</option>
-            <option value="1500" selected>보통 1.5s</option>
-            <option value="3000">강함 3s</option>
+            <option value="3000" selected>보통 3s</option>
+            <option value="12000">강함 12s</option>
           </select>
         </div>
         <div class="kv">
           <span>탐색 엔진</span>
           <select id="engine-mode">
-            <option value="hybrid" selected>Hybrid (Alpha-Beta+위협)</option>
+            <option value="hybrid" selected>Hybrid</option>
             <option value="alphabeta">Alpha-Beta</option>
             <option value="mcts">MCTS</option>
           </select>
