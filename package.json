@@ -1,0 +1,16 @@
+{
+  "name": "gomoku-pro-ai",
+  "version": "1.0.0",
+  "description": "Professional-level Gomoku (Omok) AI web application — threat-space search, alpha-beta, MCTS, linear value model with self-play reinforcement learning.",
+  "type": "module",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node server/server.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "keywords": ["gomoku", "omok", "renju", "ai", "mcts", "alpha-beta", "reinforcement-learning"],
+  "license": "MIT"
+}
